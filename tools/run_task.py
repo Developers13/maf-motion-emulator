@@ -7,6 +7,7 @@ Usage:
     entry       pipeline node to run (default: FullRun)
     adb_address adb serial, e.g. 127.0.0.1:16384 (default: first device found)
 """
+import os
 import sys
 from pathlib import Path
 
@@ -54,7 +55,18 @@ def main() -> int:
         print("[run] tasker init failed (resource/controller bind error)")
         return 1
 
-    detail = tasker.post_task(entry).wait().get()
+    # Credentials are passed via environment only - never written to files/logs.
+    pipeline_override = {}
+    user = os.environ.get("MAF_USER")
+    password = os.environ.get("MAF_PASS")
+    if user:
+        pipeline_override["SportLogin-CAS输入用户名"] = {"input_text": user}
+    if password:
+        pipeline_override["SportLogin-CAS输入密码"] = {"input_text": password}
+    if pipeline_override:
+        print(f"[run] credentials injected via env (user len={len(user or '')}, pass len={len(password or '')})")
+
+    detail = tasker.post_task(entry, pipeline_override=pipeline_override).wait().get()
     status = detail and detail.status
     succeeded = bool(getattr(status, "succeeded", status))
     print(f"[run] task {entry} succeeded={succeeded}")

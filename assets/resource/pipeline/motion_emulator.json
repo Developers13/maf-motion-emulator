@@ -22,14 +22,18 @@
         "action": "StartApp",
         "package": "net.crigh.xbgysport",
         "timeout": 30000,
-        "next": ["SportLogin-已登录主页"],
-        "on_error": ["SportLogin-未登录待实现"]
-        // TODO(未登录分支): 隐私协议弹窗(同意) → 引导页(3次左滑 → tv_start)
-        //   → 勾选 checkRule 协议 → btn_login 进 CAS webview → username/password → 登录
-        //   账号/密码经参数或 custom_action 传入，禁止写入 pipeline/日志
+        "next": [
+            "SportLogin-已登录主页",
+            "SportLogin-隐私协议",
+            "SportLogin-登录页勾选"
+        ]
+        // 状态机：StartApp 后按序轮询，首个命中进入对应分支。
+        // 注意：引导页节点刻意不在此列表——首启时 WelcomeActivity 会先渲染引导
+        // ViewPager、隐私弹窗延迟数秒才盖上（实测踩坑：引导页抢命中→未同意协议
+        // 点开始→app 退出）。引导页只能从"已同意"（隐私协议.next）进入。
     },
 
-    // 已登录判定：主页 grid 的 课外锻炼 图标+文字整格（720p 模板，0.5x 缩放自 1440x2560 实测截图）
+    // ---- 已登录分支 ----
     "SportLogin-已登录主页": {
         "recognition": "TemplateMatch",
         "template": "sport/home_exercise_entry.png",
@@ -39,10 +43,95 @@
         "next": []
     },
 
-    "SportLogin-未登录待实现": {
+    // ---- 首启隐私弹窗（同意/拒绝）----
+    "SportLogin-隐私协议": {
+        "recognition": "TemplateMatch",
+        "template": "sport/privacy_agree_btn.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["SportLogin-引导页", "SportLogin-登录页勾选", "SportLogin-已登录主页"]
+    },
+
+    // ---- 引导页（实测 tv_start 首页即可见，直接点击跳过，无需左滑）----
+    "SportLogin-引导页": {
+        "recognition": "TemplateMatch",
+        "template": "sport/guide_start_btn.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["SportLogin-登录页勾选", "SportLogin-已登录主页"]
+    },
+
+    // ---- 登录页：自旋勾选协议（未勾选态 checkbox 模板；勾选后不再命中），勾上后 CAS 入口变亮 ----
+    "SportLogin-登录页勾选": {
+        "recognition": "TemplateMatch",
+        "template": "sport/login_checkrule.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["SportLogin-打开CAS", "SportLogin-登录页勾选"]
+    },
+
+    // 勾选后的亮态入口按钮（灰态匹配不到，天然防误点）
+    "SportLogin-打开CAS": {
+        "recognition": "TemplateMatch",
+        "template": "sport/cas_entry_active.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["SportLogin-CAS用户名"]
+    },
+
+    // ---- CAS 统一身份认证 webview ----
+    "SportLogin-CAS用户名": {
+        "recognition": "TemplateMatch",
+        "template": "sport/cas_username_field.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["SportLogin-CAS输入用户名"]
+    },
+    "SportLogin-CAS输入用户名": {
         "recognition": "DirectHit",
-        "action": "StopTask"
-        // TODO: 占位失败出口——登录/弹窗/引导分支就绪后替换
+        "action": "InputText",
+        "input_text": "",
+        "pre_delay": 500,
+        "next": ["SportLogin-CAS收键盘1"]
+        // input_text 由 run_task.py 经 pipeline_override 注入学号，禁止写入本文件
+    },
+    "SportLogin-CAS收键盘1": {
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [360, 55],
+        "pre_delay": 500,
+        "next": ["SportLogin-CAS密码"]
+        // 点 webview 顶栏空白收起软键盘，恢复 password 字段布局（点 (40,42)-(174,176) 返回键之外）
+    },
+    "SportLogin-CAS密码": {
+        "recognition": "TemplateMatch",
+        "template": "sport/cas_password_field.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["SportLogin-CAS输入密码"]
+    },
+    "SportLogin-CAS输入密码": {
+        "recognition": "DirectHit",
+        "action": "InputText",
+        "input_text": "",
+        "pre_delay": 500,
+        "next": ["SportLogin-CAS收键盘2"]
+        // input_text 由 run_task.py 经 pipeline_override 注入密码
+    },
+    "SportLogin-CAS收键盘2": {
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [360, 55],
+        "pre_delay": 500,
+        "next": ["SportLogin-CAS提交"]
+    },
+    "SportLogin-CAS提交": {
+        "recognition": "TemplateMatch",
+        "template": "sport/cas_submit_btn.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["SportLogin-已登录主页"]
+        // TODO: 登录失败/2FA（验证码/滑块/设备验证）分支——超时走 on_error 停链并报告
     },
 
     "StartEmulation": {
