@@ -19,16 +19,30 @@
 
     "SportLogin": {
         "recognition": "DirectHit",
+        "action": "StartApp",
+        "package": "net.crigh.xbgysport",
+        "timeout": 30000,
+        "next": ["SportLogin-已登录主页"],
+        "on_error": ["SportLogin-未登录待实现"]
+        // TODO(未登录分支): 隐私协议弹窗(同意) → 引导页(3次左滑 → tv_start)
+        //   → 勾选 checkRule 协议 → btn_login 进 CAS webview → username/password → 登录
+        //   账号/密码经参数或 custom_action 传入，禁止写入 pipeline/日志
+    },
+
+    // 已登录判定：主页 grid 的 课外锻炼 图标+文字整格（720p 模板，0.5x 缩放自 1440x2560 实测截图）
+    "SportLogin-已登录主页": {
+        "recognition": "TemplateMatch",
+        "template": "sport/home_exercise_entry.png",
+        "roi": [0, 500, 720, 620],
+        "threshold": 0.8,
         "action": "DoNothing",
         "next": []
-        // TODO: 拉起 net.crigh.xbgysport 后：
-        //  1. Applet/协议弹窗 → template 同意 → Click
-        //  2. 引导页 → swipe 左 x3 → template tv_start → Click
-        //  3. 已登录判断 → OCR "课外锻炼" 命中则跳过
-        //  4. 勾选 checkRule 协议 → template btn_login → Click
-        //  5. CAS webview: OCR "用户名"/"密码" 定位输入框 → Click + InputText(账号/密码)
-        //  6. template 登录提交 → Click → 验证回到已登录主页
-        //  账号/密码经 interface 参数或 custom_action 传入，禁止写入 pipeline/日志
+    },
+
+    "SportLogin-未登录待实现": {
+        "recognition": "DirectHit",
+        "action": "StopTask"
+        // TODO: 占位失败出口——登录/弹窗/引导分支就绪后替换
     },
 
     "StartEmulation": {
