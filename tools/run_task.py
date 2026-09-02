@@ -63,8 +63,11 @@ def main() -> int:
         pipeline_override["SportLogin-CAS输入用户名"] = {"input_text": user}
     if password:
         pipeline_override["SportLogin-CAS输入密码"] = {"input_text": password}
+    laps = os.environ.get("MAF_LAPS")
+    if laps:
+        pipeline_override["StartEmulation-输入圈数"] = {"input_text": laps}
     if pipeline_override:
-        print(f"[run] credentials injected via env (user len={len(user or '')}, pass len={len(password or '')})")
+        print(f"[run] overrides via env (user={bool(user)}, pass={bool(password)}, laps={laps or 'default 8'})")
 
     detail = tasker.post_task(entry, pipeline_override=pipeline_override).wait().get()
     status = detail and detail.status

@@ -16,7 +16,6 @@
         "action": "DoNothing",
         "next": ["SportLogin"]
     },
-
     "SportLogin": {
         "recognition": "DirectHit",
         "action": "StartApp",
@@ -24,6 +23,7 @@
         "timeout": 30000,
         "next": [
             "SportLogin-已登录主页",
+            "SportLogin-已运动中",
             "SportLogin-隐私协议",
             "SportLogin-登录页勾选"
         ]
@@ -40,7 +40,16 @@
         "roi": [0, 500, 720, 620],
         "threshold": 0.8,
         "action": "DoNothing",
-        "next": []
+        "next": ["StartEmulation"]
+    },
+
+    // FullRun 重跑保护：已在运动中（上轮链完成/中断恢复）直接跳到模拟段
+    "SportLogin-已运动中": {
+        "recognition": "OCR",
+        "expected": ["暂停", "配速"],
+        "roi": [0, 900, 720, 380],
+        "action": "DoNothing",
+        "next": ["StartEmulation"]
     },
 
     // ---- 首启隐私弹窗（同意/拒绝）----
@@ -136,28 +145,150 @@
 
     "StartEmulation": {
         "recognition": "DirectHit",
+        "action": "StartApp",
+        "package": "com.zhufucdev.motion_emulator",
+        "timeout": 30000,
+        "next": ["StartEmulation-运行确认", "StartEmulation-表单就绪", "StartEmulation-需滚动"]
+        // app 可能直接停在 EmulateActivity（上次表单）或回 MainActivity 首页
+    },
+    "StartEmulation-需滚动": {
+        "recognition": "TemplateMatch",
+        "template": "sport/sim_card.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StartEmulation-表单就绪"]
+    },
+    "StartEmulation-表单就绪": {
+        "recognition": "TemplateMatch",
+        "template": "sport/sim_run_btn.png",
+        "threshold": 0.8,
         "action": "DoNothing",
-        "next": []
-        // TODO: 拉起 com.zhufucdev.motion_emulator 后：
-        //  1. 首页 swipe 上滑 → template 模拟卡片 → Click
-        //  2. dropdown_trace 需已有路线（未选则失败停下）
-        //  3. input_repeat_count 设 重复次数 (2.4km→6, 3.2km→8)
-        //  4. template btn_run_emulation → Click
-        //  5. 确认 模拟正在进行 卡片/通知出现
+        "next": ["StartEmulation-聚焦圈数"]
+        // 路线 dropdown_trace 需已有录制路线（模板实例已选）；未选则此链超时失败
+    },
+    "StartEmulation-聚焦圈数": {
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [360, 819],
+        "pre_delay": 500,
+        "next": ["StartEmulation-清空圈数"]
+        // input_repeat_count 输入框原生 [128,1528][1312,1750] -> 720p 中心 (360,819)
+    },
+    "StartEmulation-清空圈数": {
+        "recognition": "DirectHit",
+        "action": "ClickKey",
+        "key": [123, 67, 67, 67, 67, 67, 67, 67, 67],
+        "pre_delay": 300,
+        "next": ["StartEmulation-输入圈数"]
+        // MOVE_END 到行尾 + DEL x8 清空旧值（1-2 位数字足够）
+    },
+    "StartEmulation-输入圈数": {
+        "recognition": "DirectHit",
+        "action": "InputText",
+        "input_text": "8",
+        "pre_delay": 300,
+        "next": ["StartEmulation-收键盘"]
+        // 默认 8 圈(3.2km)；run_task.py 可经 MAF_LAPS env 覆盖（2.4km -> 6）
+    },
+    "StartEmulation-收键盘": {
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [360, 100],
+        "pre_delay": 300,
+        "next": ["StartEmulation-点开始"]
+        // 点标题栏空白收起软键盘（老 skill 实测 tap 720,200 原生 -> 720p (360,100)）
+    },
+    "StartEmulation-点开始": {
+        "recognition": "TemplateMatch",
+        "template": "sport/sim_run_btn.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StartEmulation-运行确认"]
+    },
+    "StartEmulation-运行确认": {
+        "recognition": "TemplateMatch",
+        "template": ["sport/sim_running_card.png", "sport/sim_waiting_card.png", "sport/sim_cancelled_card.png"],
+        "threshold": 0.8,
+        "action": "DoNothing",
+        "next": ["StartExercise"]
+        // 启动后先"正在等待模拟"（等体育 app 消费模拟 GPS），FullRun 里由
+        // StartExercise 接力后转"模拟正在进行"。若秒变"模拟已取消"说明
+        // 40s 消费窗口超时——StartExercise 必须紧跟其后。
+        // sim_cancelled_card 挂在这里仅为可辨识（命中即视为成功返回，由 wait 层判死）
     },
 
     "StartExercise": {
         "recognition": "DirectHit",
+        "action": "StartApp",
+        "package": "net.crigh.xbgysport",
+        "timeout": 30000,
+        "next": ["StartExercise-运动确认", "StartExercise-入口", "StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗"]
+        // 五个合法起点：已运动中（OCR 暂停/配速）/ 主页 / 课外锻炼页（栈恢复）/
+        // 白名单引导页 / 通用系统提示弹窗
+    },
+    "StartExercise-白名单引导": {
+        "recognition": "TemplateMatch",
+        "template": "sport/whitelist_title.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "target": [53, 54],
+        "next": ["StartExercise-入口", "StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗"]
+        // 「安卓手机后台运行白名单设置方法」整页引导：冷启动或点入口后都可能出现，
+        // 点左上返回箭头（原生 [40,42][174,176] -> 720p 中心 (53,54)）自旋退出；
+        // 返回后可能落主页也可能落在课外锻炼页（activity 栈恢复），两者都在 next 里
+    },
+    "StartExercise-入口": {
+        "recognition": "TemplateMatch",
+        "template": "sport/home_exercise_entry.png",
+        "roi": [0, 500, 720, 620],
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗"]
+    },
+    "StartExercise-开始栏": {
+        "recognition": "TemplateMatch",
+        "template": "sport/exercise_start_bar.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StartExercise-区域范围", "StartExercise-白名单引导", "StartExercise-继续弹窗"]
+    },
+    "StartExercise-区域范围": {
+        "recognition": "TemplateMatch",
+        "template": "sport/exercise_area_option.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StartExercise-场地", "StartExercise-白名单引导"]
+    },
+    "StartExercise-场地": {
+        "recognition": "TemplateMatch",
+        "template": "sport/field_xingtianyuan.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StartExercise-运动确认", "StartExercise-继续弹窗", "StartExercise-白名单引导"]
+    },
+    "StartExercise-继续弹窗": {
+        "recognition": "TemplateMatch",
+        "template": "sport/dialog_continue_btn.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StartExercise-运动确认", "StartExercise-白名单引导"]
+        // 通用「系统提示」弹窗（按钮均为 继续运动）：非有效锻炼时段（晚间必现）或
+        // 「检测到有异常记录」续跑提示；有效时段且无异常时轮询直接命中运动确认
+    },
+    "StartExercise-运动确认": {
+        "recognition": "OCR",
+        "expected": ["暂停", "配速"],
+        "roi": [0, 900, 720, 380],
         "action": "DoNothing",
-        "next": []
-        // TODO: 西工大体育 课外锻炼 → 开始课外锻炼 → 锻炼方式选择(2025-09 新版为 RangeActivity
-        //  场地列表，非旧版 dialog) → 选择 长安校区星天苑田径场 → 确认 运动中
+        "next": ["WaitExerciseFinish"]
+        // 运动中地图页底部数据卡：暂停按钮常驻（刚启动配速可能无值，实测踩坑），
+        // OCR 任一命中即确认；ROI 覆盖底部卡片区
     },
 
     "WaitExerciseFinish": {
         "recognition": "DirectHit",
         "action": "DoNothing",
         "next": []
-        // TODO: 每 ~120s 轮询模拟通知/锻炼计时，直到锻炼结束；公里数冻结检测（模拟已取消保护）
+        // TODO: 轮询锻炼结束/公里数冻结检测（模拟已取消保护）——下一轮实现
     }
 }
