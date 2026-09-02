@@ -1,0 +1,47 @@
+{
+    // ProjectInterface V2 - 定义通用 UI（MFAAvalonia 等）如何加载与运行本项目
+    // 文档：https://maafw.com/docs/3.3-ProjectInterfaceV2
+    "interface_version": 2,
+    "name": "MAF Motion Emulator",
+    "description": "西工大体育课外锻炼模拟助手：Motion Emulator 路线模拟 + 西工大体育课外锻炼打卡，跑在 MuMu 等 Android 模拟器上。由 MaaFramework 强力驱动。",
+    "version": "0.1.0",
+    "controller": [
+        {
+            "name": "安卓端 (MuMu/模拟器)",
+            "type": "Adb",
+            "display_short_side": 720
+        }
+    ],
+    "resource": [
+        {
+            "name": "默认",
+            "path": [
+                "./resource"
+            ]
+        }
+    ],
+    "agent": {
+        "child_exec": "python",
+        "child_args": [
+            "./agent/main.py"
+        ]
+    },
+    "task": [
+        {
+            "name": "完整流程（登录 → 模拟 → 锻炼）",
+            "entry": "FullRun"
+        },
+        {
+            "name": "登录西工大体育",
+            "entry": "SportLogin"
+        },
+        {
+            "name": "启动运动模拟",
+            "entry": "StartEmulation"
+        },
+        {
+            "name": "开始课外锻炼",
+            "entry": "StartExercise"
+        }
+    ]
+}
