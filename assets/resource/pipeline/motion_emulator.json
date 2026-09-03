@@ -24,6 +24,7 @@
         "next": [
             "SportLogin-已登录主页",
             "SportLogin-已运动中",
+            "SportLogin-记录详情页",
             "SportLogin-隐私协议",
             "SportLogin-登录页勾选"
         ]
@@ -31,6 +32,18 @@
         // 注意：引导页节点刻意不在此列表——首启时 WelcomeActivity 会先渲染引导
         // ViewPager、隐私弹窗延迟数秒才盖上（实测踩坑：引导页抢命中→未同意协议
         // 点开始→app 退出）。引导页只能从"已同意"（隐私协议.next）进入。
+    },
+
+    // 上轮保存后冷启动会恢复到记录详情页（实测踩坑）：返回键退出到主页
+    "SportLogin-记录详情页": {
+        "recognition": "OCR",
+        "expected": "平均配速",
+        "roi": [0, 400, 720, 400],
+        "action": "Click",
+        "target": [53, 54],
+        "next": ["SportLogin-已登录主页", "SportLogin-已运动中", "SportLogin-记录详情页"]
+        // 左上返回箭头（原生 [40,42][174,176] -> 720p 中心 (53,54)）；
+        // 返回后可能落主页或运动中页（栈恢复）
     },
 
     // ---- 已登录分支 ----
