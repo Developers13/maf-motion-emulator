@@ -323,28 +323,30 @@
         "roi": [0, 500, 720, 620],
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗"]
+        "next": ["StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗", "StartExercise-异常保存落地"]
     },
     "StartExercise-开始栏": {
         "recognition": "TemplateMatch",
         "template": "sport/exercise_start_bar.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-区域范围", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗"]
+        "next": ["StartExercise-区域范围", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗", "StartExercise-异常保存落地"]
+        // 实测踩坑：异常记录 停止 后记录页有 ~1-2s 弹出动画，链条可能在过渡期抢跑，
+        // 随后记录页盖屏 —— 各节点 next 里挂 异常保存落地 兜底（返回后重新走链）
     },
     "StartExercise-区域范围": {
         "recognition": "TemplateMatch",
         "template": "sport/exercise_area_option.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-场地", "StartExercise-白名单引导", "StartExercise-异常记录弹窗"]
+        "next": ["StartExercise-场地", "StartExercise-白名单引导", "StartExercise-异常记录弹窗", "StartExercise-异常保存落地"]
     },
     "StartExercise-场地": {
         "recognition": "TemplateMatch",
         "template": "sport/field_xingtianyuan.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-续跑孤儿检测", "StartExercise-运动确认", "StartExercise-继续弹窗", "StartExercise-白名单引导", "StartExercise-异常记录弹窗"]
+        "next": ["StartExercise-续跑孤儿检测", "StartExercise-运动确认", "StartExercise-继续弹窗", "StartExercise-白名单引导", "StartExercise-异常记录弹窗", "StartExercise-异常保存落地"]
     },
     "StartExercise-续跑孤儿检测": {
         "recognition": "Custom",
