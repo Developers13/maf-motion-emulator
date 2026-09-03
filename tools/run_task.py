@@ -80,7 +80,7 @@ def main() -> int:
     if target_km:
         pipeline_override["WaitExerciseFinish"] = {"custom_action_param": {"target_km": float(target_km)}}
     if pipeline_override:
-        print(f"[run] overrides via env (user={bool(user)}, pass={bool(password)}, laps={laps or 'default 8'}, target_km={target_km or 'default 3.2'})")
+        print(f"[run] overrides via env (user={bool(user)}, pass={bool(password)}, laps={laps or 'default 8'}, target_km={target_km or 'default 3.3'})")
 
     detail = tasker.post_task(entry, pipeline_override=pipeline_override).wait().get()
     status = detail and detail.status
