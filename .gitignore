@@ -455,3 +455,6 @@ debug
 # maafw runtime artifacts
 maafw.log
 debug/
+
+# 凭证文件：只存本地，禁止提交到仓库（明文密码）
+user-list.json
