@@ -331,9 +331,18 @@
         "template": "sport/exercise_start_bar.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-区域范围", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗", "StartExercise-异常保存落地"]
-        // 实测踩坑：异常记录 停止 后记录页有 ~1-2s 弹出动画，链条可能在过渡期抢跑，
-        // 随后记录页盖屏 —— 各节点 next 里挂 异常保存落地 兜底（返回后重新走链）
+        "next": ["StartExercise-锻炼设置页", "StartExercise-区域范围", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗", "StartExercise-异常保存落地"]
+        // 实测顺序变体：点开始栏后可能先弹 课外锻炼设置页（评分次数/素质课次数 0次 +
+        // 底部 开始课外锻炼 按钮），不直接进区域选择
+    },
+    "StartExercise-锻炼设置页": {
+        "recognition": "TemplateMatch",
+        "template": "sport/exercise_go_btn.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StartExercise-区域范围", "StartExercise-继续弹窗", "StartExercise-白名单引导", "StartExercise-异常记录弹窗"]
+        // 课外锻炼设置页底部 开始课外锻炼 大按钮（720p (180,1155)-(540,1230) 实测裁剪）
+        // -> 进入 锻炼方式选择（区域范围）
     },
     "StartExercise-区域范围": {
         "recognition": "TemplateMatch",
