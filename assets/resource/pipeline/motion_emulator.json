@@ -322,16 +322,18 @@
         "custom_action_param": {
             "poll_sec": 30,
             "max_wait_sec": 2700,
-            "target_km": 3.0,
+            "target_km": 3.2,
             "stall_sec": 240,
             "blank_limit": 5
         },
         "next": ["StopExercise"]
         // agent/my_wait.py：纯被动轮询（截屏+OCR，不点击）。实测：锻炼不会自动结束，
         // 里程超目标也一直计时，必须人工停止并在 60s 倒计时内确认保存。
-        // 顶部统计区 总公里数 >= target_km -> True -> StopExercise（停止+保存）；
+        // 顶部统计区 总公里数 >= target_km -> True -> StopExercise（停止+保存）。
+        // target_km = 校要求距离本身（3.2；2.4 场景 run_task.py 经 MAF_TARGET_KM=2.4 覆盖，
+        // 配 MAF_LAPS=6）。停止耗时 <1min 天然超冲 ~0.02-0.1km，保证落库 >= 要求值；
         // 未达标但距离停滞（stall_sec 无增长 = 模拟已取消早死）/ 页面消失 / 超时 -> False，
-        // on_error 保持为空让任务以失败终止。target_km 可由 run_task.py 经 MAF_TARGET_KM 覆盖。
+        // on_error 保持为空让任务以失败终止。
     },
 
     // ---- 停止并保存锻炼（实测流程：点红色停止键 -> 自动暂停+结束单(60s 倒计时) -> 确认结束 -> 上传成功 -> 记录详情页）----

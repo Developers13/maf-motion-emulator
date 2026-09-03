@@ -75,7 +75,7 @@ class WaitExerciseFinish(CustomAction):
         param = json.loads(argv.custom_action_param) if argv.custom_action_param else {}
         poll_sec = int(param.get("poll_sec", 30))
         max_wait_sec = int(param.get("max_wait_sec", 2700))
-        target_km = float(param.get("target_km", 3.0))
+        target_km = float(param.get("target_km", 3.2))
         # 距离停滞判定窗：12km/h ≈ 0.2km/min，240s 应至少 +0.1km（读数精度 0.01 均覆盖）
         stall_sec = int(param.get("stall_sec", 240))
         blank_limit = int(param.get("blank_limit", 5))
