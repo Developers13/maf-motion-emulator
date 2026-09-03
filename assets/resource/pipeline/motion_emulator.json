@@ -287,8 +287,18 @@
 
     "WaitExerciseFinish": {
         "recognition": "DirectHit",
-        "action": "DoNothing",
+        "action": "Custom",
+        "custom_action": "wait_exercise_finish",
+        "custom_action_param": {
+            "poll_sec": 60,
+            "max_wait_sec": 2700,
+            "stall_sec": 180,
+            "blank_limit": 5
+        },
         "next": []
-        // TODO: 轮询锻炼结束/公里数冻结检测（模拟已取消保护）——下一轮实现
+        // agent/my_wait.py：纯被动轮询（截屏+OCR，不点击）。结束页锚点命中 -> next（保存流程待接）；
+        // 距离停滞（stall_sec 内无增长 = 模拟已取消/GPS 冻结）/ 页面消失 / 超时 -> 返回 False，
+        // on_error 保持为空让任务以失败终止。
+        // 老 skill 实测：模拟死后「模拟正在进行」通知仍会存活数分钟，总公里数冻结才是可靠死信号。
     }
 }
