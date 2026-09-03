@@ -252,18 +252,50 @@
         "action": "StartApp",
         "package": "net.crigh.xbgysport",
         "timeout": 30000,
-        "next": ["StartExercise-运动确认", "StartExercise-入口", "StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗"]
-        // 六个合法起点：已运动中 / 主页 / 课外锻炼页（栈恢复）/ 白名单引导页 /
-        // 时段提示弹窗 / 异常记录弹窗（上次意外退出后开始锻炼时出现）
+        "next": ["StartExercise-孤儿锻炼", "StartExercise-入口", "StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗"]
+        // 合法起点：孤儿锻炼（上次中断残留的运动中页，必须停止保存后重新开始，用户要求
+        // 绝不 继续运动）/ 主页 / 课外锻炼页（栈恢复）/ 白名单引导页 / 时段提示弹窗 / 异常记录弹窗
+    },
+    // ---- 孤儿锻炼处置：点红色停止 -> 结束单确认 -> 保存 -> 返回重新开始 ----
+    "StartExercise-孤儿锻炼": {
+        "recognition": "OCR",
+        "expected": ["运动中", "暂停"],
+        "roi": [0, 0, 720, 1280],
+        "action": "DoNothing",
+        "next": ["StartExercise-孤儿停止"]
+        // StartApp 一进来就是运动中页 = 上次中断的残留锻炼（正常保存过的轮次不会出现）
+    },
+    "StartExercise-孤儿停止": {
+        "recognition": "TemplateMatch",
+        "template": "sport/stop_btn.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StartExercise-孤儿确认结束", "StartExercise-孤儿停止"]
+        // 红色停止键 -> 运动暂停中 + 结束单（60s 倒计时）
+    },
+    "StartExercise-孤儿确认结束": {
+        "recognition": "TemplateMatch",
+        "template": "sport/confirm_end_btn.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StartExercise-异常保存落地", "StartExercise-入口", "StartExercise-开始栏", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗"]
     },
     "StartExercise-异常记录弹窗": {
         "recognition": "OCR",
-        "expected": ["去保存", "去 保存"],
+        "expected": ["检测到异常记录", "异常记录"],
+        "action": "DoNothing",
+        "next": ["StartExercise-异常记录停止"]
+        // 「检测到异常记录」弹窗（上次意外退出遗留未完成记录）：先锚弹窗文本确认语境，
+        // 再由下一步点按钮。绝不点 继续运动（用户明确要求——续跑会产生被污染的记录）
+    },
+    "StartExercise-异常记录停止": {
+        "recognition": "OCR",
+        "expected": ["停止", "去保存", "去 保存"],
+        "roi": [60, 300, 600, 700],
         "action": "Click",
         "next": ["StartExercise-异常保存落地", "StartExercise-入口", "StartExercise-开始栏", "StartExercise-继续弹窗"]
-        // 「检测到异常记录」弹窗（上次意外退出遗留未完成记录）：必须点 去保存 把残缺
-        // 记录落库后重新开始锻炼；不能点 继续运动（用户明确要求——续跑会产生异常数据）。
-        // OCR 锚 去保存 按钮文字，命中即点击该文本框，无需模板
+        // 异常弹窗的操作按钮实测文案为 停止（点它=保存残缺记录并退出）；
+        // 仅在 异常记录弹窗 命中后的语境下轮询，时段弹窗（继续运动）不会走到这里
     },
     "StartExercise-异常保存落地": {
         "recognition": "OCR",
@@ -271,8 +303,8 @@
         "roi": [0, 400, 720, 400],
         "action": "Click",
         "target": [53, 54],
-        "next": ["StartExercise-入口", "StartExercise-开始栏", "StartExercise-继续弹窗", "StartExercise-异常保存落地"]
-        // 去保存 后大概率落在残缺记录的详情页：点左上返回退出，重新走 开始锻炼 链
+        "next": ["StartExercise-入口", "StartExercise-开始栏", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗", "StartExercise-异常保存落地"]
+        // 保存后落在残缺记录详情页：点左上返回退出，重新走 开始锻炼 链
     },
     "StartExercise-白名单引导": {
         "recognition": "TemplateMatch",
@@ -312,7 +344,17 @@
         "template": "sport/field_xingtianyuan.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-运动确认", "StartExercise-继续弹窗", "StartExercise-白名单引导", "StartExercise-异常记录弹窗"]
+        "next": ["StartExercise-续跑孤儿检测", "StartExercise-运动确认", "StartExercise-继续弹窗", "StartExercise-白名单引导", "StartExercise-异常记录弹窗"]
+    },
+    "StartExercise-续跑孤儿检测": {
+        "recognition": "Custom",
+        "custom_recognition": "resumed_orphan",
+        "action": "DoNothing",
+        "next": ["StartExercise-孤儿停止"]
+        // agent/my_reco.py：实测踩坑——强停后重新开始锻炼，app 可能弹 继续运动 把残留
+        // 锻炼续上（计时保留、含空档）。本识别在 运动确认 前判断：运动中页但 时长>=4min
+        // 或 公里>=0.3 = 残留续跑，转 孤儿停止 链丢弃重开；新开锻炼（秒级计时）不命中，
+        // 落到 运动确认 正常等待
     },
     "StartExercise-继续弹窗": {
         "recognition": "TemplateMatch",

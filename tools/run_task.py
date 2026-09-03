@@ -57,7 +57,7 @@ def main() -> int:
 
     resource.register_custom_action("wait_exercise_finish", my_wait.WaitExerciseFinish())
     resource.register_custom_action("stop_run", my_action.StopRun())
-    resource.register_custom_recognition("exercise_running", my_reco.ExerciseRunning())
+    resource.register_custom_recognition("resumed_orphan", my_reco.ResumedOrphan())
 
     tasker = Tasker()
     tasker.bind(resource, controller)
