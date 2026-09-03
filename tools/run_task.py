@@ -91,11 +91,13 @@ def main() -> int:
     # 失败现场截图由 MaaFW 自动保存在 debug/debug/on_error/。
     if entry == "FullRun":
         try:
-            ctrl_target = "com.zhufucdev.motion_emulator" if succeeded else "net.crigh.xbgysport"
-            controller.post_stop_app(ctrl_target).wait()
-            if not succeeded:
+            if succeeded:
                 controller.post_stop_app("com.zhufucdev.motion_emulator").wait()
-            print(f"[run] cleanup: stopped {ctrl_target}" + ("" if succeeded else " + net.crigh.xbgysport"))
+                print("[run] cleanup: stopped com.zhufucdev.motion_emulator")
+            else:
+                controller.post_stop_app("net.crigh.xbgysport").wait()
+                controller.post_stop_app("com.zhufucdev.motion_emulator").wait()
+                print("[run] cleanup: stopped sport + emulator apps")
         except Exception as e:
             print(f"[run] cleanup failed: {e}")
 
