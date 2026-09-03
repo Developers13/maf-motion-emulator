@@ -363,11 +363,12 @@
         "template": "sport/dialog_continue_btn.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-运动确认", "StartExercise-白名单引导", "StartExercise-异常记录弹窗"]
+        "next": ["StartExercise-续跑孤儿检测", "StartExercise-运动确认", "StartExercise-白名单引导", "StartExercise-异常记录弹窗", "StartExercise-异常保存落地"]
         // 「根据学校规定，当前时间不在规定有效锻炼时间内，是否继续锻炼?」弹窗：
         // 非有效锻炼时段（晚间）必现，此处点 继续运动 是正确处理。
-        // 注意：「检测到异常记录」弹窗不走这里（按钮文字不同，模板不匹配），
-        // 由 异常记录弹窗 节点 OCR 去保存 处理
+        // 实测踩坑：这弹窗在 开始栏 点击后即出现，把链直接弹向 运动确认，绕过
+        // 场地.next 的孤儿检查 —— 所以 续跑孤儿检测 必须也挂在本节点 next 首位：
+        // 点完 继续运动 若续上的是残留锻炼（计时>=4min），转 孤儿停止 丢弃重开
     },
     "StartExercise-运动确认": {
         "recognition": "OCR",
