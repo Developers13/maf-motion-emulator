@@ -45,9 +45,9 @@
         "roi": [0, 400, 720, 400],
         "action": "Click",
         "target": [53, 54],
-        "next": ["SportLogin-已登录主页", "SportLogin-已运动中", "SportLogin-记录详情页"]
+        "next": ["SportLogin-已登录主页", "SportLogin-已运动中", "Common-发现页切主页", "SportLogin-记录详情页"]
         // 左上返回箭头（原生 [40,42][174,176] -> 720p 中心 (53,54)）；
-        // 返回后可能落主页或运动中页（栈恢复）
+        // 返回后可能落主页、运动中页或 发现 页（栈恢复），第三者由共享节点兜底
     },
 
     // ---- 已登录分支 ----
@@ -303,8 +303,9 @@
         "roi": [0, 400, 720, 400],
         "action": "Click",
         "target": [53, 54],
-        "next": ["StartExercise-入口", "StartExercise-开始栏", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗", "StartExercise-异常保存落地"]
-        // 保存后落在残缺记录详情页：点左上返回退出，重新走 开始锻炼 链
+        "next": ["Common-发现页切主页", "StartExercise-入口", "StartExercise-开始栏", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗", "StartExercise-异常保存落地"]
+        // 保存后落在残缺记录详情页：点左上返回退出，重新走 开始锻炼 链；
+        // 返回可能落主页也可能落 发现 页（实测），后者由 Common-发现页切主页 兜底
     },
     "StartExercise-白名单引导": {
         "recognition": "TemplateMatch",
@@ -400,6 +401,17 @@
         // 留余量防止 卡线不达标而无效。
         // 未达标但距离停滞（stall_sec 无增长 = 模拟已取消早死）/ 页面消失 / 超时 -> False，
         // on_error 保持为空让任务以失败终止。
+    },
+
+    // ---- 跨链共享：保存/返回后可能落在 发现 信息流页（实测记录页返回落点之一）----
+    "Common-发现页切主页": {
+        "recognition": "OCR",
+        "expected": ["跑步说明", "选课说明", "发现"],
+        "action": "Click",
+        "target": [120, 1215],
+        "next": ["SportLogin-已登录主页", "StartExercise-入口", "StartExercise-开始栏", "Common-发现页切主页"]
+        // 发现页横幅色彩丰富，开始栏 模板会在其上误匹配(>=0.8) —— 必须在链路
+        // 分叉前先识别并点底部 主页 tab（720p (120,1215)）回主页
     },
 
     // ---- 停止并保存锻炼（实测流程：点红色停止键 -> 自动暂停+结束单(60s 倒计时) -> 确认结束 -> 上传成功 -> 记录详情页）----
