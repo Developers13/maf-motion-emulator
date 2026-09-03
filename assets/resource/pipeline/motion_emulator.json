@@ -13,8 +13,12 @@
 
     "FullRun": {
         "recognition": "DirectHit",
-        "action": "DoNothing",
+        "action": "Shell",
+        "cmd": "am force-stop net.crigh.xbgysport; am force-stop com.zhufucdev.motion_emulator",
         "next": ["SportLogin"]
+        // 实测踩坑：体育 app 进程跨「保存记录」后位置会话会卡死（运动页 计时 00:00:00、
+        // GPS 2/3、正在加载数据... 转圈，模拟 GPS 永远进不来）。FullRun 起点先强停两个
+        // app，保证每次都是全新会话
     },
     "SportLogin": {
         "recognition": "DirectHit",
