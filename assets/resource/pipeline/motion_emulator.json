@@ -46,10 +46,12 @@
     // FullRun 重跑保护：已在运动中（上轮链完成/中断恢复）直接跳到模拟段
     "SportLogin-已运动中": {
         "recognition": "OCR",
-        "expected": ["暂停", "配速"],
-        "roi": [0, 900, 720, 380],
+        "expected": ["运动中", "暂停"],
+        "roi": [0, 0, 720, 1280],
         "action": "DoNothing",
         "next": ["StartEmulation"]
+        // 运动中页：顶部标题 运动中（暂停态为 运动暂停中，不含 运动中 连续字样）+
+        // 底部 暂停 按钮字样，任一命中即认定锻炼进行中
     },
 
     // ---- 首启隐私弹窗（同意/拒绝）----
@@ -288,12 +290,12 @@
     },
     "StartExercise-运动确认": {
         "recognition": "OCR",
-        "expected": ["暂停", "配速"],
-        "roi": [0, 900, 720, 380],
+        "expected": ["运动中", "暂停"],
+        "roi": [0, 0, 720, 1280],
         "action": "DoNothing",
         "next": ["WaitExerciseFinish"]
-        // 运动中地图页底部数据卡：暂停按钮常驻（刚启动配速可能无值，实测踩坑），
-        // OCR 任一命中即确认；ROI 覆盖底部卡片区
+        // 运动中页：标题 运动中 + 暂停 按钮字样任一命中即确认（OCR 实测）；
+        // 刚启动时配速可能无值，不作为锚点
     },
 
     "WaitExerciseFinish": {
@@ -301,15 +303,53 @@
         "action": "Custom",
         "custom_action": "wait_exercise_finish",
         "custom_action_param": {
-            "poll_sec": 60,
+            "poll_sec": 30,
             "max_wait_sec": 2700,
-            "stall_sec": 180,
+            "target_km": 3.0,
+            "stall_sec": 240,
             "blank_limit": 5
         },
+        "next": ["StopExercise"]
+        // agent/my_wait.py：纯被动轮询（截屏+OCR，不点击）。实测：锻炼不会自动结束，
+        // 里程超目标也一直计时，必须人工停止并在 60s 倒计时内确认保存。
+        // 顶部统计区 总公里数 >= target_km -> True -> StopExercise（停止+保存）；
+        // 未达标但距离停滞（stall_sec 无增长 = 模拟已取消早死）/ 页面消失 / 超时 -> False，
+        // on_error 保持为空让任务以失败终止。target_km 可由 run_task.py 经 MAF_TARGET_KM 覆盖。
+    },
+
+    // ---- 停止并保存锻炼（实测流程：点红色停止键 -> 自动暂停+结束单(60s 倒计时) -> 确认结束 -> 上传成功 -> 记录详情页）----
+    "StopExercise": {
+        "recognition": "DirectHit",
+        "action": "DoNothing",
+        "timeout": 120000,
+        "next": ["StopExercise-确认结束", "StopExercise-保存确认", "StopExercise-停止按钮"]
+        // 结束单可能已开着（重入），先试 确认结束；再试记录页已出现（保存完成）；
+        // 都没有则点停止键拉起结束单
+    },
+    "StopExercise-停止按钮": {
+        "recognition": "TemplateMatch",
+        "template": "sport/stop_btn.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StopExercise-确认结束", "StopExercise-保存确认"]
+        // 运动中页右下红色方块按钮（720p (494,1009)-(628,1139) 实测裁剪）；
+        // 点击后进入 运动暂停中 + 结束单（剩余操作时间 60s 倒计时）
+    },
+    "StopExercise-确认结束": {
+        "recognition": "TemplateMatch",
+        "template": "sport/confirm_end_btn.png",
+        "threshold": 0.8,
+        "action": "Click",
+        "next": ["StopExercise-保存确认"]
+        // 结束单蓝色按钮（须在 60s 倒计时内点掉，超时自动恢复运动中 -> 回到 停止按钮 重试）
+    },
+    "StopExercise-保存确认": {
+        "recognition": "OCR",
+        "expected": "平均配速",
+        "roi": [0, 400, 720, 400],
+        "action": "DoNothing",
         "next": []
-        // agent/my_wait.py：纯被动轮询（截屏+OCR，不点击）。结束页锚点命中 -> next（保存流程待接）；
-        // 距离停滞（stall_sec 内无增长 = 模拟已取消/GPS 冻结）/ 页面消失 / 超时 -> 返回 False，
-        // on_error 保持为空让任务以失败终止。
-        // 老 skill 实测：模拟死后「模拟正在进行」通知仍会存活数分钟，总公里数冻结才是可靠死信号。
+        // 记录详情页锚点：时长/均速/平均配速/热量 统计行（y≈500-580 实测）。
+        // 有效/无效徽章均可，保存即成功；记录有效性由锻炼时段/时长条件决定，不在本链控制内
     }
 }

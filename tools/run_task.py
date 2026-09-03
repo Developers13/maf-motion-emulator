@@ -49,6 +49,16 @@ def main() -> int:
     resource = Resource()
     resource.post_bundle(str(project_dir / "assets" / "resource")).wait()
 
+    # agent 自定义识别/动作进程内注册（不启 agent 子进程；MFAAvalonia 走 interface.json 的 agent 通道）
+    sys.path.insert(0, str(project_dir / "agent"))
+    import my_action
+    import my_reco
+    import my_wait
+
+    resource.register_custom_action("wait_exercise_finish", my_wait.WaitExerciseFinish())
+    resource.register_custom_action("stop_run", my_action.StopRun())
+    resource.register_custom_recognition("exercise_running", my_reco.ExerciseRunning())
+
     tasker = Tasker()
     tasker.bind(resource, controller)
     if not tasker.inited:
@@ -66,8 +76,11 @@ def main() -> int:
     laps = os.environ.get("MAF_LAPS")
     if laps:
         pipeline_override["StartEmulation-输入圈数"] = {"input_text": laps}
+    target_km = os.environ.get("MAF_TARGET_KM")
+    if target_km:
+        pipeline_override["WaitExerciseFinish"] = {"custom_action_param": {"target_km": float(target_km)}}
     if pipeline_override:
-        print(f"[run] overrides via env (user={bool(user)}, pass={bool(password)}, laps={laps or 'default 8'})")
+        print(f"[run] overrides via env (user={bool(user)}, pass={bool(password)}, laps={laps or 'default 8'}, target_km={target_km or 'default 3.0'})")
 
     detail = tasker.post_task(entry, pipeline_override=pipeline_override).wait().get()
     status = detail and detail.status
