@@ -85,6 +85,20 @@ def main() -> int:
     detail = tasker.post_task(entry, pipeline_override=pipeline_override).wait().get()
     status = detail and detail.status
     succeeded = bool(getattr(status, "succeeded", status))
+
+    # 清理责任：成功后模拟已完成使命（记录已保存），停掉模拟器 app；
+    # 失败时强停两个 app —— 体育 app 不留孤儿锻炼（计时会一直跑），模拟不留假活状态。
+    # 失败现场截图由 MaaFW 自动保存在 debug/debug/on_error/。
+    if entry == "FullRun":
+        try:
+            ctrl_target = "com.zhufucdev.motion_emulator" if succeeded else "net.crigh.xbgysport"
+            controller.post_stop_app(ctrl_target).wait()
+            if not succeeded:
+                controller.post_stop_app("com.zhufucdev.motion_emulator").wait()
+            print(f"[run] cleanup: stopped {ctrl_target}" + ("" if succeeded else " + net.crigh.xbgysport"))
+        except Exception as e:
+            print(f"[run] cleanup failed: {e}")
+
     print(f"[run] task {entry} succeeded={succeeded}")
     return 0 if succeeded else 2
 
