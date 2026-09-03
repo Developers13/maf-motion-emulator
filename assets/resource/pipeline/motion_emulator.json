@@ -147,9 +147,20 @@
         "recognition": "DirectHit",
         "action": "StartApp",
         "package": "com.zhufucdev.motion_emulator",
-        "timeout": 30000,
-        "next": ["StartEmulation-运行确认", "StartEmulation-表单就绪", "StartEmulation-需滚动"]
-        // app 可能直接停在 EmulateActivity（上次表单）或回 MainActivity 首页
+        "timeout": 60000,
+        "next": ["StartEmulation-运行确认", "StartEmulation-表单就绪", "StartEmulation-需滚动", "StartEmulation-主页滚动"]
+        // app 可能直接停在 EmulateActivity（上次表单）、回 MainActivity 首页顶部（冷启动实测），
+        // 或停在上次滚动位置的主页
+    },
+    "StartEmulation-主页滚动": {
+        "recognition": "OCR",
+        "expected": ["此应用已就绪"],
+        "action": "Swipe",
+        "begin": [360, 900],
+        "end": [360, 250],
+        "next": ["StartEmulation-运行确认", "StartEmulation-表单就绪", "StartEmulation-需滚动", "StartEmulation-主页滚动"]
+        // 冷启动实测：主页首屏看不到 模拟 卡（列表最底部）。OCR 锚定顶部「此应用已就绪」卡，
+        // 上滑一屏；模拟卡可见后下一轮由 需滚动 分支点击。self 兜底继续滚动
     },
     "StartEmulation-需滚动": {
         "recognition": "TemplateMatch",
