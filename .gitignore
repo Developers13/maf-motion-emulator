@@ -458,3 +458,6 @@ debug/
 
 # 凭证文件：只存本地，禁止提交到仓库（明文密码）
 user-list.json
+
+# GUI 本地配置（机器相关路径 / Python 启动器 / 环境变量），不提交
+gui/gui-settings.json
