@@ -252,9 +252,27 @@
         "action": "StartApp",
         "package": "net.crigh.xbgysport",
         "timeout": 30000,
-        "next": ["StartExercise-运动确认", "StartExercise-入口", "StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗"]
-        // 五个合法起点：已运动中（OCR 暂停/配速）/ 主页 / 课外锻炼页（栈恢复）/
-        // 白名单引导页 / 通用系统提示弹窗
+        "next": ["StartExercise-运动确认", "StartExercise-入口", "StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗"]
+        // 六个合法起点：已运动中 / 主页 / 课外锻炼页（栈恢复）/ 白名单引导页 /
+        // 时段提示弹窗 / 异常记录弹窗（上次意外退出后开始锻炼时出现）
+    },
+    "StartExercise-异常记录弹窗": {
+        "recognition": "OCR",
+        "expected": ["去保存", "去 保存"],
+        "action": "Click",
+        "next": ["StartExercise-异常保存落地", "StartExercise-入口", "StartExercise-开始栏", "StartExercise-继续弹窗"]
+        // 「检测到异常记录」弹窗（上次意外退出遗留未完成记录）：必须点 去保存 把残缺
+        // 记录落库后重新开始锻炼；不能点 继续运动（用户明确要求——续跑会产生异常数据）。
+        // OCR 锚 去保存 按钮文字，命中即点击该文本框，无需模板
+    },
+    "StartExercise-异常保存落地": {
+        "recognition": "OCR",
+        "expected": "平均配速",
+        "roi": [0, 400, 720, 400],
+        "action": "Click",
+        "target": [53, 54],
+        "next": ["StartExercise-入口", "StartExercise-开始栏", "StartExercise-继续弹窗", "StartExercise-异常保存落地"]
+        // 去保存 后大概率落在残缺记录的详情页：点左上返回退出，重新走 开始锻炼 链
     },
     "StartExercise-白名单引导": {
         "recognition": "TemplateMatch",
@@ -262,7 +280,7 @@
         "threshold": 0.8,
         "action": "Click",
         "target": [53, 54],
-        "next": ["StartExercise-入口", "StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗"]
+        "next": ["StartExercise-入口", "StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗"]
         // 「安卓手机后台运行白名单设置方法」整页引导：冷启动或点入口后都可能出现，
         // 点左上返回箭头（原生 [40,42][174,176] -> 720p 中心 (53,54)）自旋退出；
         // 返回后可能落主页也可能落在课外锻炼页（activity 栈恢复），两者都在 next 里
@@ -273,37 +291,39 @@
         "roi": [0, 500, 720, 620],
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗"]
+        "next": ["StartExercise-开始栏", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗"]
     },
     "StartExercise-开始栏": {
         "recognition": "TemplateMatch",
         "template": "sport/exercise_start_bar.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-区域范围", "StartExercise-白名单引导", "StartExercise-继续弹窗"]
+        "next": ["StartExercise-区域范围", "StartExercise-白名单引导", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗"]
     },
     "StartExercise-区域范围": {
         "recognition": "TemplateMatch",
         "template": "sport/exercise_area_option.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-场地", "StartExercise-白名单引导"]
+        "next": ["StartExercise-场地", "StartExercise-白名单引导", "StartExercise-异常记录弹窗"]
     },
     "StartExercise-场地": {
         "recognition": "TemplateMatch",
         "template": "sport/field_xingtianyuan.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-运动确认", "StartExercise-继续弹窗", "StartExercise-白名单引导"]
+        "next": ["StartExercise-运动确认", "StartExercise-继续弹窗", "StartExercise-白名单引导", "StartExercise-异常记录弹窗"]
     },
     "StartExercise-继续弹窗": {
         "recognition": "TemplateMatch",
         "template": "sport/dialog_continue_btn.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StartExercise-运动确认", "StartExercise-白名单引导"]
-        // 通用「系统提示」弹窗（按钮均为 继续运动）：非有效锻炼时段（晚间必现）或
-        // 「检测到有异常记录」续跑提示；有效时段且无异常时轮询直接命中运动确认
+        "next": ["StartExercise-运动确认", "StartExercise-白名单引导", "StartExercise-异常记录弹窗"]
+        // 「根据学校规定，当前时间不在规定有效锻炼时间内，是否继续锻炼?」弹窗：
+        // 非有效锻炼时段（晚间）必现，此处点 继续运动 是正确处理。
+        // 注意：「检测到异常记录」弹窗不走这里（按钮文字不同，模板不匹配），
+        // 由 异常记录弹窗 节点 OCR 去保存 处理
     },
     "StartExercise-运动确认": {
         "recognition": "OCR",
