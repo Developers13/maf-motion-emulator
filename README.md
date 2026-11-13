@@ -44,17 +44,16 @@ running instance except the template:
 ```
 
 The template instance (default 模板) is never closed by `shutdown-all`; it is the
-clone source and belongs to no student. In the GUI, running with 「全部」 selected
+clone source and belongs to no student. In the GUI, selecting multiple students
 uses this automatically: for each student it closes the others, prepares and runs
 that student, then closes that instance before moving on, and closes everything
 when the batch finishes.
 
-The GUI also pushes a Windows notification whenever a run or pre-run prep ends —
-success, failure, or manual stop. In a batch each student's outcome is pushed as
-it happens plus a final summary, so you can walk away and still see progress. If
-the toast platform rejects the elevated app, it falls back to a raw WinRT push
-(attributed to PowerShell) and finally silently gives up; the log and status bar
-always show the outcome regardless.
+The GUI also pushes a native Windows notification whenever a run or pre-run prep
+ends — success, failure, or manual stop — as long as the window is not focused.
+In a batch each student's outcome is pushed as it happens plus a final summary, so
+you can walk away and still see progress. The in-app log and status bar always
+show the outcome regardless.
 
 ### 2. Run
 
@@ -140,6 +139,32 @@ The sports app grades a session on three conditions (shown on its end sheet):
 3. started within the school's allowed exercise time window — schedule runs
    accordingly; off-window runs still complete but are graded invalid/pending
 
+## Desktop GUI (Tauri v2)
+
+The GUI is a Tauri v2 app in `gui/` (Vite + vanilla TypeScript frontend, Rust
+backend). It replaces the old WinForms launcher and keeps the same on-disk
+contracts: `gui/gui-settings.json`, `gui/exercise-status.json`, the root
+`user-list.json`, and the PowerShell scripts under `gui/scripts/`.
+
+Prerequisites: Node 22+/pnpm, Rust (MSVC toolchain), Visual Studio Build Tools
+with the Windows SDK, and the WebView2 runtime (preinstalled on Windows 10/11).
+
+```powershell
+cd gui
+pnpm install
+
+# Development (the exe requires administrator; run from an elevated terminal)
+pnpm tauri dev
+
+# Release build (exe in gui/src-tauri/target/release/)
+pnpm tauri build --no-bundle   # or omit --no-bundle to also build the NSIS installer
+```
+
+The release exe embeds a `requireAdministrator` manifest, so Windows shows a UAC
+prompt on launch — MuMu/adb operations need the elevated token. Test suites:
+`pnpm test` (frontend logic) and `cargo test --manifest-path src-tauri/Cargo.toml`
+(Rust settings/status/process-job logic).
+
 ## Project structure
 
 ```tree
@@ -156,6 +181,11 @@ maf-motion-emulator/
 │       ├── model/ocr/       # OCR model (not committed; CI provisions it)
 │       └── pipeline/        # task pipeline (low-code logic)
 ├── deps/tools/              # JSON schemas (validation)
+├── gui/                     # Tauri v2 desktop app (replaces the old WinForms GUI)
+│   ├── src/                 #   vanilla TypeScript frontend (Vite)
+│   ├── src-tauri/           #   Rust backend: process control + orchestration
+│   ├── scripts/             #   mumu / adb-prep / root-recover PowerShell scripts
+│   └── tools/nemu/          #   MuMu SDK tap fallback used by root recovery
 ├── tools/
 │   ├── e2e.py               # CLI entry: batch / single-student runs
 │   ├── run_task.py          # low-level: run one pipeline entry against adb

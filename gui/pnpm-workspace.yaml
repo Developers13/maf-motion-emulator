@@ -1,0 +1,3 @@
+# pnpm 11 build-approval allowlist
+allowBuilds:
+  esbuild: true

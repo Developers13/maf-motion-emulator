@@ -1,0 +1,51 @@
+/* 设计令牌：沿用旧 GUI 的骨白/墨色体系，只补充桌面工具需要的层级与状态色。 */
+:root {
+  --canvas: #f7f6f3;
+  --surface: #ffffff;
+  --surface-muted: #fbfaf7;
+  --ink: #111111;
+  --body: #2f3437;
+  --muted: #787774;
+  --border: #eaeaea;
+  --border-strong: #dcd9d2;
+  --hover: #f1f0ed;
+
+  --blue-bg: #e1f3fe;
+  --blue: #1f6c9f;
+  --green-bg: #edf3ec;
+  --green: #346538;
+  --red-bg: #fdebec;
+  --red: #9f2f2d;
+  --amber: #e0a212;
+  --amber-bg: #fbf1d8;
+
+  --dot-off: #c8c7c2;
+
+  --sans: "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --serif: Georgia, "Times New Roman", serif;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+
+  --shadow-soft: 0 1px 2px rgba(17, 17, 17, 0.04), 0 10px 30px rgba(17, 17, 17, 0.07);
+  --shadow-sheet: 0 24px 80px rgba(17, 17, 17, 0.18);
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur: 160ms;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}

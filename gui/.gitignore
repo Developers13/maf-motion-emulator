@@ -1,0 +1,12 @@
+# Tauri + Vite build outputs
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Local runtime data (tracked locations are documented in README)
+# gui-settings.json / exercise-status.json intentionally stay untracked (repo root .gitignore)
+
+# local visual-check artifacts
+.taste-skill/
+shots/
