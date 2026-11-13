@@ -27,5 +27,27 @@ class StopRun(CustomAction):
         return True
 
 
+class CasInputPassword(CustomAction):
+    """CAS 登录页输入密码。
+
+    密码只从环境变量 MAF_PASS 读取，绝不放进 pipeline_override —— maafw 会把
+    post_task 的 override 连明文写进 maafw.log（实测泄漏，2026-11-08）。
+    键入走 controller.post_input_text（文本不落日志），输入当前聚焦的密码框。
+    对应 pipeline 节点：SportLogin-CAS输入密码（action: Custom + custom_registration）。
+    """
+
+    def run(
+        self,
+        context: Context,
+        argv: CustomAction.RunArg,
+    ) -> bool:
+        password = os.environ.get("MAF_PASS", "")
+        if password:
+            context.tasker.controller.post_input_text(password).wait()
+        else:
+            print("[cas_input_password] MAF_PASS not set; typing nothing", flush=True)
+        return True
+
+
 if _IN_AGENT:
     StopRun = AgentServer.custom_action("stop_run")(StopRun)

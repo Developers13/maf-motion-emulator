@@ -42,6 +42,10 @@
         {
             "name": "开始课外锻炼",
             "entry": "StartExercise"
+        },
+        {
+            "name": "读取运动次数（本周/学期）",
+            "entry": "ReadCounts"
         }
     ]
 }

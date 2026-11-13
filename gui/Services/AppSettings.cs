@@ -26,7 +26,22 @@ public sealed class AppSettings
     /// <summary>作为克隆源模板的虚拟机名称。</summary>
     public string TemplateVmName { get; set; } = "模板";
 
+    /// <summary>
+    /// 运行 PowerShell 脚本的宿主程序（如 Windows PowerShell 5.1 / PowerShell 7）。
+    /// 空表示自动（使用系统 powershell.exe）。
+    /// </summary>
+    public string ScriptHostPath { get; set; } = "";
+
     public string LastStudentId { get; set; } = "";
+
+    /// <summary>主页多选的学号集合（有效性与顺序以 user-list.json 为准；空=默认全选）。</summary>
+    public List<string> SelectedStudents { get; set; } = new();
+
+    /// <summary>每周计入成绩的次数上限（学校规则：5 次/周）。</summary>
+    public int WeekLimit { get; set; } = 5;
+
+    /// <summary>一学期总次数上限（学校规则：32 次/学期）。</summary>
+    public int TotalLimit { get; set; } = 32;
 
     public bool AutoScroll { get; set; } = true;
 
@@ -61,6 +76,16 @@ public sealed class AppSettings
         settings.PythonLauncher = string.IsNullOrWhiteSpace(settings.PythonLauncher) ? "py" : settings.PythonLauncher;
         settings.ProjectRoot ??= "";
         settings.LastStudentId ??= "";
+        settings.SelectedStudents ??= new List<string>();
+        if (settings.WeekLimit <= 0)
+        {
+            settings.WeekLimit = 5;
+        }
+
+        if (settings.TotalLimit <= 0)
+        {
+            settings.TotalLimit = 32;
+        }
         settings.Environment ??= new Dictionary<string, string>();
         if (string.IsNullOrWhiteSpace(settings.MuMuManagerPath))
         {
@@ -72,6 +97,7 @@ public sealed class AppSettings
             settings.TemplateVmName = "模板";
         }
 
+        settings.ScriptHostPath ??= "";
         return settings;
     }
 }

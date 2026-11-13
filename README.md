@@ -35,6 +35,27 @@ Each student runs on their own MuMu instance. Launch it and note its adb port
 (If you keep the legacy `motion-emulate-automation` skill around, its
 `scripts/mumu.ps1 -Action ensure -StudentId <id>` wraps clone/rename/launch/boot-poll.)
 
+The GUI's `gui/scripts/mumu.ps1` also provides `shutdown-all`, which closes every
+running instance except the template:
+
+```powershell
+.\gui\scripts\mumu.ps1 -Action shutdown-all                          # close all students' instances
+.\gui\scripts\mumu.ps1 -Action shutdown-all -KeepStudentId 2025302319  # keep only this student's
+```
+
+The template instance (default 模板) is never closed by `shutdown-all`; it is the
+clone source and belongs to no student. In the GUI, running with 「全部」 selected
+uses this automatically: for each student it closes the others, prepares and runs
+that student, then closes that instance before moving on, and closes everything
+when the batch finishes.
+
+The GUI also pushes a Windows notification whenever a run or pre-run prep ends —
+success, failure, or manual stop. In a batch each student's outcome is pushed as
+it happens plus a final summary, so you can walk away and still see progress. If
+the toast platform rejects the elevated app, it falls back to a raw WinRT push
+(attributed to PowerShell) and finally silently gives up; the log and status bar
+always show the outcome regardless.
+
 ### 2. Run
 
 Batch (every row in `user-list.json`) or a single student:
@@ -42,6 +63,7 @@ Batch (every row in `user-list.json`) or a single student:
 ```bash
 python tools/e2e.py              # all rows
 python tools/e2e.py 2025302319   # one student
+python tools/e2e.py --dry-run    # print each student's target adb address, run nothing
 ```
 
 `tools/e2e.py` is the standard CLI entry. Per row it resolves laps and target
@@ -50,6 +72,42 @@ target 3.3 km), injects credentials through environment variables only
 (never written to disk or logs), and runs the full chain via
 `tools/run_task.py`. Exit code 0 = all rows succeeded, 1 = some failed
 (also reported as `[e2e] done. failed=[...]`).
+
+**Multi-instance routing**: each row is dispatched to *that student's own
+instance* — `e2e.py` looks up the MuMu instance named after the student ID and
+passes its adb address explicitly to `run_task.py`. Without this, `run_task.py`
+would fall back to the first device in the adb list, so every student would be
+driven on whichever emulator happened to be first. Instances must be started
+first (`gui/scripts/mumu.ps1 -Action ensure -StudentId <id>`; the GUI's 「开始」
+`button does this automatically before every run); `--dry-run` shows the resolved
+address per student. The manager path can be overridden with `MAF_MUMU_MANAGER`.
+
+**Screencap resilience**: `MaaToolkit` offers MuMu devices only the
+`EmulatorExtras` screencap method (the MuMu SDK path). MuMu assigns apps to
+displays dynamically, and when the resolved display id goes stale the extras
+call fails and the framework has *no* method left — the run dies mid-flow with
+`No available screencap method`. `run_task.py` therefore requests
+`EmulatorExtras | Encode | EncodeToFileAndPull`: extras still wins the speed
+test when healthy, and an adb method takes over when it isn't (verified to
+reach the app's display for both capture and input). It also performs a
+screencap self-check right after connecting, so a broken controller aborts
+before the login flow starts instead of halfway through.
+
+**Manual verification (CAS risk control)**: repeating logins for the same
+account can trip the school's risk control, and the CAS page then answers a
+submit with a 「安全验证」 dialog (usually an SMS code to a masked phone
+number) instead of returning to the app. Previously that state had no branch,
+so the login chain simply timed out and the whole run was reported failed —
+even though a human only needed to tap twice on the emulator.
+
+The pipeline now has a `SportLogin-安全验证` node, checked in every CAS
+polling window (`打开CAS` / `收键盘1` / `收键盘2` / `提交`). On a match
+`agent/my_verify.py` **pauses and waits for you**: it prints a banner, then
+polls purely passively (screenshot + OCR — it never clicks, so it will not
+auto-request an SMS). Completing the verification on the emulator resumes the
+flow by itself, re-entering login or continuing to the main page. It gives up
+after `max_wait_sec` (default 20 min) or when you press Stop in the GUI, and
+at most 5 rounds per run, so it can never wait forever.
 
 ### 3. Low-level single task (debugging)
 

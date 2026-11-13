@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 
@@ -20,7 +21,12 @@ public sealed class PowerShellResult
 
 /// <summary>
 /// 运行 PowerShell 脚本（mumu.ps1 / adb-prep.ps1 等），UTF-8 读取输出，可超时。
-/// 同步阻塞调用，供后台任务使用；需逐行实时回调时用 <see cref="RunAsync"/>。
+/// 同步阻塞调用，供后台任务使用（配合 Task.Run 实现异步）。
+/// 脚本以子进程身份继承 GUI 的管理员令牌：GUI 未提权时脚本也不会提权
+/// （Windows 不允许从非提权进程重定向输出的同时提权子进程），
+/// 因此 GUI 在 Program.Main 中强制提权后才会走到这里。
+/// 宿主程序可通过 <paramref name="hostPath"/> 指定（设置页「脚本执行器」），
+/// 无效或未指定时使用系统 powershell.exe。
 /// </summary>
 public static class PowerShellRunner
 {
@@ -48,6 +54,16 @@ public static class PowerShellRunner
     }
 
     /// <summary>
+    /// 解析实际使用的宿主：hostPath 有效则用之，否则回退系统 powershell.exe。
+    /// </summary>
+    public static string ResolveHost(string? hostPath)
+    {
+        return !string.IsNullOrWhiteSpace(hostPath) && File.Exists(hostPath)
+            ? hostPath
+            : FindPowerShell();
+    }
+
+    /// <summary>
     /// 同步执行。每行输出（含结尾空行）都会经 onLine 回调；超时或取消时终止进程树并抛 TimeoutException / OperationCanceledException。
     /// </summary>
     public static PowerShellResult Run(
@@ -55,12 +71,13 @@ public static class PowerShellRunner
         IReadOnlyDictionary<string, string?> arguments,
         Action<string>? onLine = null,
         TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? hostPath = null)
     {
         var argumentsText = BuildArguments(arguments);
         var psi = new ProcessStartInfo
         {
-            FileName = FindPowerShell(),
+            FileName = ResolveHost(hostPath),
             Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\" {argumentsText}",
             UseShellExecute = false,
             RedirectStandardOutput = true,
@@ -71,32 +88,45 @@ public static class PowerShellRunner
         };
 
         using var process = new Process { StartInfo = psi };
-        var lines = new List<string>();
 
-        process.OutputDataReceived += (_, e) =>
+        // 输出回调在 .NET 的线程池线程上投递；Run 返回前必须确认所有回调都已跑完，
+        // 否则调用方拿到的 Lines 会缺最后一两行 —— 实测（60 轮，脚本只输出末尾一行
+        // 后立即 exit 0）约 1/3 的轮次丢掉那唯一一行，表现为「exit 0 但 (no output)」，
+        // 正是 mumu.ps1 ensure 输出 READY 的致命形态。
+        // 计数 + 门闩：每个输出流结束时投递一条 null（EOF 哨兵），两个流都到齐才放行。
+        var lines = new ConcurrentQueue<string>();
+        var streamsDone = 0;
+        using var drained = new ManualResetEventSlim(false);
+        var streamsTotal = 2; // stdout + stderr
+
+        void OnStreamLine(string? data)
         {
-            if (e.Data is not null)
+            if (data is null)
             {
-                lines.Add(e.Data);
-                onLine?.Invoke(e.Data);
+                // EOF 哨兵：该流已经读干净，不再有后续回调。
+                if (Interlocked.Increment(ref streamsDone) >= streamsTotal)
+                {
+                    drained.Set();
+                }
+
+                return;
             }
-        };
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data is not null)
-            {
-                lines.Add(e.Data);
-                onLine?.Invoke(e.Data);
-            }
-        };
+
+            lines.Enqueue(data);
+            onLine?.Invoke(data);
+        }
+
+        process.OutputDataReceived += (_, e) => OnStreamLine(e.Data);
+        process.ErrorDataReceived += (_, e) => OnStreamLine(e.Data);
 
         try
         {
             if (!process.Start())
             {
-                throw new InvalidOperationException("无法启动 powershell.exe");
+                throw new InvalidOperationException("Failed to start powershell.exe");
             }
 
+            ProcessRegistry.Register(process);
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
@@ -112,20 +142,29 @@ public static class PowerShellRunner
                     // 进程可能已退出，忽略。
                 }
 
-                throw new TimeoutException($"PowerShell 脚本执行超时（>{effectiveTimeout.TotalSeconds:0}s）：{Path.GetFileName(scriptPath)}");
+                throw new TimeoutException($"PowerShell script timed out (>{effectiveTimeout.TotalSeconds:0}s): {Path.GetFileName(scriptPath)}");
             }
 
-            process.WaitForExit(); // 确保异步读完成
+            // 有界等待异步输出排干：正常情况是进程退出后回调很快跑完。能走到这里说明
+            // 主进程一定是自行退出的（超时路径在上面已抛 TimeoutException），EOF 仍未
+            // 到达只可能是残留孙进程持有管道写端。此时不再强杀进程树——可能误杀仍在
+            // 干活的合法后台进程（如收尾中的 adb / MuMuManager）；只再多等 2s，然后带
+            // 部分输出返回：行数可能不全，但比无限等待或误杀都好。
+            if (!drained.Wait(TimeSpan.FromSeconds(3)))
+            {
+                drained.Wait(TimeSpan.FromSeconds(2));
+            }
 
             if (cancellationToken.IsCancellationRequested)
             {
                 throw new OperationCanceledException(cancellationToken);
             }
 
-            return new PowerShellResult(process.ExitCode, lines);
+            return new PowerShellResult(process.ExitCode, lines.ToArray());
         }
         finally
         {
+            ProcessRegistry.Unregister(process);
             process.Dispose();
         }
     }

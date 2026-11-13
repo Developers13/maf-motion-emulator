@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Drawing.Text;
 
 namespace MafMotionEmulator.Gui;
 
@@ -25,25 +26,74 @@ internal static class UiTheme
     public static readonly Color PaleGreenBg = Color.FromArgb(0xED, 0xF3, 0xEC);
     public static readonly Color PaleGreenText = Color.FromArgb(0x34, 0x65, 0x38);
 
+    // 状态圆点（玻璃球质感）：灰=未满/未知，黄=本周额度已满，绿=总次数已满。
+    public static readonly Color DotOff = Color.FromArgb(0xC8, 0xC7, 0xC2);
+    public static readonly Color DotWeek = Color.FromArgb(0xE0, 0xA2, 0x12);
+    public static readonly Color DotTotal = Color.FromArgb(0x3F, 0x9E, 0x4A);
+
     // ---- 字体 ----
 
     public static readonly Font Sans = new("Segoe UI", 9.75f);
     public static readonly Font SansSmall = new("Segoe UI", 9f);
     public static readonly Font SerifTitle = new("Georgia", 17f, FontStyle.Bold);
     public static readonly Font SerifTitleSmall = new("Georgia", 14f, FontStyle.Bold);
+
+    // 私有字体集合必须保持被引用（GDI+ 字体句柄依赖它），故存于静态字段。
+    // 注意声明顺序：字段初始化按声明顺序执行，BundledMono 必须在 Mono 之前。
+    private static readonly PrivateFontCollection? BundledMono = LoadBundledMono();
     public static readonly Font Mono = CreateMono();
 
     private static Font CreateMono()
     {
-        // Cascadia Mono（Win11 自带）优先，缺失回退 Consolas。
+        // JetBrains Mono 优先：先取随程序打包的私有字体（assets/fonts），
+        // 再找系统已装的 JetBrains Mono / Cascadia Mono；都缺失时回退 Consolas。
+        if (BundledMono is { Families.Length: > 0 } collection)
+        {
+            return new Font(collection.Families[0], 9.5f);
+        }
+
+        var familyName = TryCreateFamily("JetBrains Mono")
+                         ?? TryCreateFamily("Cascadia Mono")
+                         ?? "Consolas";
+        return new Font(familyName, 9.5f);
+    }
+
+    private static PrivateFontCollection? LoadBundledMono()
+    {
         try
         {
-            using var family = new FontFamily("Cascadia Mono");
-            return new Font(family, 9.5f);
+            var regular = Path.Combine(AppContext.BaseDirectory, "assets", "fonts", "JetBrainsMono-Regular.ttf");
+            if (!File.Exists(regular))
+            {
+                return null;
+            }
+
+            var collection = new PrivateFontCollection { };
+            collection.AddFontFile(regular);
+            var bold = Path.Combine(AppContext.BaseDirectory, "assets", "fonts", "JetBrainsMono-Bold.ttf");
+            if (File.Exists(bold))
+            {
+                collection.AddFontFile(bold);
+            }
+
+            return collection;
         }
         catch
         {
-            return new Font("Consolas", 9.5f);
+            return null; // 字体文件损坏/被占用时回退系统字体
+        }
+    }
+
+    private static string? TryCreateFamily(string name)
+    {
+        try
+        {
+            using var family = new FontFamily(name);
+            return name;
+        }
+        catch
+        {
+            return null;
         }
     }
 

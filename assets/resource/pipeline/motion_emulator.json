@@ -20,6 +20,23 @@
         // GPS 2/3、正在加载数据... 转圈，模拟 GPS 永远进不来）。FullRun 起点先强停两个
         // app，保证每次都是全新会话
     },
+    // "ReadCounts": 只读次数、不锻炼的一次性探针（跑前判定是否已达上限）。
+    // 由 e2e.py 在 FullRun 之前单独调用；agent/my_counts.py 负责导航与读数，
+    // 打印 [counts] week=.. total=..，失败也只打印 [counts] failed=..（fail-open）。
+    "ReadCounts": {
+        "recognition": "DirectHit",
+        "action": "Shell",
+        "cmd": "am force-stop net.crigh.xbgysport",
+        "next": ["ReadCounts-执行"]
+        // 先强停：冷启动路径唯一（避免上次停留在运动中/记录页时读到旧页面）
+    },
+    "ReadCounts-执行": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "read_counts",
+        "next": []
+    },
+
     "SportLogin": {
         "recognition": "DirectHit",
         "action": "StartApp",
@@ -104,7 +121,37 @@
         "template": "sport/cas_entry_active.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["SportLogin-CAS用户名"]
+        "next": ["SportLogin-安全验证", "SportLogin-CAS用户名"]
+    },
+
+    // ---- CAS 风控「安全验证」弹窗：挂起等人工处理，不失败退出 ----
+    // 实测（2026-09-20）：同账号连续登录触发风控，提交后不返回主页，而是弹
+    // 安全验证（短信验证码）。此前无该分支，后继节点匹配不上 -> 节点超时 -> 整链失败退出；
+    // 而用户其实只需在模拟器上收个验证码点两下。本节点命中后由 agent/my_verify.py
+    // 纯被动轮询（不点击，绝不代点「获取验证码」）等用户完成，完成后回到登录分支收尾。
+    "SportLogin-安全验证": {
+        "recognition": "OCR",
+        "expected": ["安全验证", "当前登录环境异常", "获取验证码", "使用安全手机验证"],
+        "roi": [0, 0, 720, 1280],
+        "action": "Custom",
+        "custom_action": "wait_manual_verify",
+        "custom_action_param": {
+            "poll_sec": 5,
+            "max_wait_sec": 1200,
+            "confirm_times": 2,
+            "log_every_sec": 30
+        },
+        "next": [
+            "SportLogin-已登录主页",
+            "SportLogin-已运动中",
+            "SportLogin-CAS用户名",
+            "SportLogin-登录页勾选",
+            "SportLogin-安全验证"
+        ]
+        // next 首位 已登录主页：验证通过后确已登录 -> 直接进主流程。
+        // CAS用户名 / 登录页勾选：验证只是放行、并未登录 -> 重走登录链。
+        // 末位 self：验证完又弹出来（用户点了取消/验证失败）继续挂起等待，
+        // 而不是让上层节点超时把整链判失败。
     },
 
     // ---- CAS 统一身份认证 webview ----
@@ -128,7 +175,7 @@
         "action": "Click",
         "target": [360, 55],
         "pre_delay": 500,
-        "next": ["SportLogin-CAS密码"]
+        "next": ["SportLogin-安全验证", "SportLogin-CAS密码"]
         // 点 webview 顶栏空白收起软键盘，恢复 password 字段布局（点 (40,42)-(174,176) 返回键之外）
     },
     "SportLogin-CAS密码": {
@@ -140,26 +187,28 @@
     },
     "SportLogin-CAS输入密码": {
         "recognition": "DirectHit",
-        "action": "InputText",
-        "input_text": "",
+        "action": "Custom",
+        "custom_action": "cas_input_password",
         "pre_delay": 500,
         "next": ["SportLogin-CAS收键盘2"]
-        // input_text 由 run_task.py 经 pipeline_override 注入密码
+        // 密码由 custom action 从环境变量 MAF_PASS 读取，经 controller.post_input_text
+        // 键入（文本不落 maafw.log）。禁止用 input_text/pipeline_override 传密码 ——
+        // maafw 会把 override 连明文写进 maafw.log（实测泄漏 2026-11-08）
     },
     "SportLogin-CAS收键盘2": {
         "recognition": "DirectHit",
         "action": "Click",
         "target": [360, 55],
         "pre_delay": 500,
-        "next": ["SportLogin-CAS提交"]
+        "next": ["SportLogin-安全验证", "SportLogin-CAS提交"]
     },
     "SportLogin-CAS提交": {
         "recognition": "TemplateMatch",
         "template": "sport/cas_submit_btn.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["SportLogin-已登录主页"]
-        // TODO: 登录失败/2FA（验证码/滑块/设备验证）分支——超时走 on_error 停链并报告
+        "next": ["SportLogin-安全验证", "SportLogin-已登录主页"]
+        // 提交后两种走向：风控弹 安全验证（挂起等人工，见上），或直接登录进主页
     },
 
     "StartEmulation": {
@@ -270,14 +319,17 @@
         "template": "sport/stop_btn.png",
         "threshold": 0.8,
         "action": "Click",
+        "timeout": 30000,
         "next": ["StartExercise-孤儿确认结束", "StartExercise-孤儿停止"]
-        // 红色停止键 -> 运动暂停中 + 结束单（60s 倒计时）
+        // 红色停止键（内切方块模板，点击必在圆内，见 StopExercise-停止按钮 注）
+        // -> 运动暂停中 + 结束单（60s 倒计时）；next 自引用 = 点空自动重试
     },
     "StartExercise-孤儿确认结束": {
         "recognition": "TemplateMatch",
         "template": "sport/confirm_end_btn.png",
         "threshold": 0.8,
         "action": "Click",
+        "target_offset": [80, 0, -160, 0],
         "next": ["StartExercise-异常保存落地", "StartExercise-入口", "StartExercise-开始栏", "StartExercise-继续弹窗", "StartExercise-异常记录弹窗"]
     },
     "StartExercise-异常记录弹窗": {
@@ -373,9 +425,12 @@
         "template": "sport/dialog_continue_btn.png",
         "threshold": 0.8,
         "action": "Click",
+        "target_offset": [100, 0, -200, 0],
         "next": ["StartExercise-续跑孤儿检测", "StartExercise-运动确认", "StartExercise-白名单引导", "StartExercise-异常记录弹窗", "StartExercise-异常保存落地"]
         // 「根据学校规定，当前时间不在规定有效锻炼时间内，是否继续锻炼?」弹窗：
         // 非有效锻炼时段（晚间）必现，此处点 继续运动 是正确处理。
+        // target_offset 收窄到中部 261x92（半宽 130.5 < 461/2-46=184.5），胶囊端部圆弧
+        // 外是死区，点空虽可重试但白耗一轮识别。
         // 实测踩坑：这弹窗在 开始栏 点击后即出现，把链直接弹向 运动确认，绕过
         // 场地.next 的孤儿检查 —— 所以 续跑孤儿检测 必须也挂在本节点 next 首位：
         // 点完 继续运动 若续上的是残留锻炼（计时>=4min），转 孤儿停止 丢弃重开
@@ -437,17 +492,28 @@
         "template": "sport/stop_btn.png",
         "threshold": 0.8,
         "action": "Click",
-        "next": ["StopExercise-确认结束", "StopExercise-保存确认"]
-        // 运动中页右下红色方块按钮（720p (494,1009)-(628,1139) 实测裁剪）；
-        // 点击后进入 运动暂停中 + 结束单（剩余操作时间 60s 倒计时）
+        "timeout": 30000,
+        "next": ["StopExercise-确认结束", "StopExercise-保存确认", "StopExercise-停止按钮"]
+        // 运动中页右下红色圆钮（720p (494,1009)-(628,1139)）。模板已重裁为按钮中心
+        // 80x80 内切方块：旧 134x130 模板四角含地图背景，地图滚动导致匹配分跌破阈值
+        // （实测 0.818~0.852，09.22/09.24/09.26 三次折在此处），重裁后实测 0.9998；
+        // 且内切方块任意点都在圆内 —— MaaFW Click 是在高斯分布（σ=边长/3）下在框内
+        // 随机取点，旧模板框角落在圆外：按其算法 200 万次蒙特卡洛实测 11.5% 概率点空
+        // （09.26 实点 (623,1106) 距圆心 69.6px > 半径 65；09.22/09.24 同因失败）。
+        // next 自引用：点了没反应（极小概率仍点空/动画吞掉）时 30s 窗口内自动重试，
+        // 结束单弹出后本按钮被遮挡不再命中，链条前进到 确认结束
     },
     "StopExercise-确认结束": {
         "recognition": "TemplateMatch",
         "template": "sport/confirm_end_btn.png",
         "threshold": 0.8,
         "action": "Click",
+        "target_offset": [80, 0, -160, 0],
         "next": ["StopExercise-保存确认"]
-        // 结束单蓝色按钮（须在 60s 倒计时内点掉，超时自动恢复运动中 -> 回到 停止按钮 重试）
+        // 结束单蓝色胶囊按钮（552x80，两端全圆角）。target_offset 收窄到中部 392x80：
+        // 胶囊端部圆弧外是死区，点空一次烧掉 60s 倒计时的 1/3；收窄后任意采样点都
+        // 落在直线段内（半宽 196 < 552/2-40=236）。须在 60s 倒计时内点掉，
+        // 超时自动恢复运动中 -> 回到 停止按钮 重试
     },
     "StopExercise-保存确认": {
         "recognition": "OCR",

@@ -5,7 +5,7 @@ using MafMotionEmulator.Gui.Services;
 
 namespace MafMotionEmulator.Gui;
 
-public sealed class SettingsForm : Form
+public sealed class SettingsForm : FadeForm
 {
     private const int PasswordColumnIndex = 1;
 
@@ -19,6 +19,8 @@ public sealed class SettingsForm : Form
     private readonly TextBox _projectRootBox = new();
     private readonly TextBox _mumuManagerBox = new();
     private readonly TextBox _templateVmBox = new();
+    private readonly ComboBox _scriptHostCombo = new();
+    private static readonly ScriptHost AutoScriptHost = new("自动（推荐）", "");
     private readonly Button _addUserButton;
     private readonly Button _removeUserButton;
     private readonly Button _reloadUserButton;
@@ -394,12 +396,12 @@ public sealed class SettingsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 7,
+            RowCount = 8,
             BackColor = UiTheme.Surface,
         };
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var i = 0; i < 4; i++)
+        for (var i = 0; i < 5; i++)
         {
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         }
@@ -411,20 +413,22 @@ public sealed class SettingsForm : Form
         panel.Controls.Add(FieldLabel("项目根目录"), 0, 1);
         panel.Controls.Add(FieldLabel("MuMu 管理器"), 0, 2);
         panel.Controls.Add(FieldLabel("模板虚拟机"), 0, 3);
+        panel.Controls.Add(FieldLabel("脚本执行器"), 0, 4);
         panel.Controls.Add(WrapField(_pythonBox), 1, 0);
         panel.Controls.Add(WrapField(_projectRootBox), 1, 1);
         panel.Controls.Add(WrapField(_mumuManagerBox), 1, 2);
         panel.Controls.Add(WrapField(_templateVmBox), 1, 3);
+        panel.Controls.Add(_scriptHostCombo, 1, 4);
 
         var envLabel = UiTheme.MakeMutedLabel(
             "运行时传给脚本的额外环境变量（MAF_USER / MAF_PASS / MAF_LAPS / MAF_TARGET_KM 由脚本依据 user-list.json 自动注入，无需在此填写）：");
         envLabel.Margin = new Padding(0, 10, 0, 6);
         envLabel.AutoSize = true;
-        panel.Controls.Add(envLabel, 0, 4);
+        panel.Controls.Add(envLabel, 0, 5);
         panel.SetColumnSpan(envLabel, 2);
 
         ConfigureEnvGrid();
-        panel.Controls.Add(_envGrid, 0, 5);
+        panel.Controls.Add(_envGrid, 0, 6);
         panel.SetColumnSpan(_envGrid, 2);
 
         var buttons = new FlowLayoutPanel
@@ -444,7 +448,7 @@ public sealed class SettingsForm : Form
         };
         buttons.Controls.Add(_addEnvButton);
         buttons.Controls.Add(_removeEnvButton);
-        panel.Controls.Add(buttons, 0, 6);
+        panel.Controls.Add(buttons, 0, 7);
         panel.SetColumnSpan(buttons, 2);
 
         container.Controls.Add(panel);
@@ -473,6 +477,35 @@ public sealed class SettingsForm : Form
         return label;
     }
 
+    /// <summary>
+    /// 扫描已安装的 PowerShell 宿主填充下拉框；选中已保存的宿主，
+    /// 保存值已卸载/不存在时显示「（未找到）」项，避免配置悄悄丢失。
+    /// </summary>
+    private void PopulateScriptHosts()
+    {
+        _scriptHostCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+        _scriptHostCombo.Font = UiTheme.Sans;
+        _scriptHostCombo.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
+        _scriptHostCombo.Margin = new Padding(0, 6, 0, 0);
+        _scriptHostCombo.Items.Clear();
+        _scriptHostCombo.Items.Add(AutoScriptHost);
+        foreach (var host in ScriptHostScanner.Scan())
+        {
+            _scriptHostCombo.Items.Add(host);
+        }
+
+        var saved = _settings.ScriptHostPath;
+        var selected = _scriptHostCombo.Items.OfType<ScriptHost>()
+            .FirstOrDefault(h => h.Path.Equals(saved, StringComparison.OrdinalIgnoreCase));
+        if (selected is null && !string.IsNullOrWhiteSpace(saved))
+        {
+            selected = new ScriptHost($"{saved}（未找到）", saved);
+            _scriptHostCombo.Items.Add(selected);
+        }
+
+        _scriptHostCombo.SelectedItem = selected ?? AutoScriptHost;
+    }
+
     private void ConfigureEnvGrid()
     {
         _envGrid.Dock = DockStyle.Fill;
@@ -493,6 +526,7 @@ public sealed class SettingsForm : Form
             : _settings.ProjectRoot;
         _mumuManagerBox.Text = _settings.MuMuManagerPath;
         _templateVmBox.Text = _settings.TemplateVmName;
+        PopulateScriptHosts();
 
         _envGrid.Rows.Clear();
         foreach (var pair in _settings.Environment)
@@ -509,6 +543,7 @@ public sealed class SettingsForm : Form
             ? @"C:\Program Files\Netease\MuMu\nx_main\MuMuManager.exe"
             : _mumuManagerBox.Text.Trim();
         _settings.TemplateVmName = string.IsNullOrWhiteSpace(_templateVmBox.Text) ? "模板" : _templateVmBox.Text.Trim();
+        _settings.ScriptHostPath = _scriptHostCombo.SelectedItem is ScriptHost host ? host.Path : "";
 
         var environment = new Dictionary<string, string>();
         foreach (DataGridViewRow row in _envGrid.Rows)

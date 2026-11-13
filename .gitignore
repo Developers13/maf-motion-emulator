@@ -456,8 +456,79 @@ debug
 maafw.log
 debug/
 
-# 凭证文件：只存本地，禁止提交到仓库（明文密码）
+# ============================================================================
+# 本地敏感信息：只存本机，禁止提交
+# ============================================================================
+
+# 凭证文件：明文密码。裸模式（无斜杠）可匹配任意层级，防止复制到子目录后漏掉
 user-list.json
+
+# 环境变量文件：可能含 MAF_USER / MAF_PASS 等登录凭据
+.env
+.env.*
+# 模板可以提交，便于他人照抄字段名
+!.env.example
+!.env.sample
+!.env.template
 
 # GUI 本地配置（机器相关路径 / Python 启动器 / 环境变量），不提交
 gui/gui-settings.json
+
+# GUI 本地运动次数缓存（从 App 读到的每学号本周/总次数），不提交
+gui/exercise-status.json
+
+# ============================================================================
+# 开发 artifacts
+# ============================================================================
+
+# Python：虚拟环境
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+
+# Python：测试 / 类型检查 / 格式化缓存
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.nox/
+htmlcov/
+.coverage
+.coverage.*
+.ipynb_checkpoints/
+
+# Node：已由上方 node_modules/ 覆盖；此处补包管理器本地状态
+.npm/
+.yarn/
+
+# 通用构建产物目录（与上方 build / install 同类）
+dist/
+sdist/
+
+# 体积大且可再生成的二进制模型（OCR 模型由 CI 提供，见 assets/resource/model/）
+*.onnx
+
+# 命令行工具的本地构建产物（nemu.exe 由 gui/tools/nemu/nemu.cs 编译产生）
+gui/tools/nemu/nemu.exe
+
+# 调试/临时产物（裸模式覆盖任意层级）
+*.bak
+*.orig
+*.rej
+*.tmp
+*.temp
+
+# 操作系统与编辑器临时文件
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+desktop.ini
+*.lnk
+
+# 本地日志与崩溃转储（*.log 已在上方覆盖，此处补转储）
+*.dmp
+*.stackdump

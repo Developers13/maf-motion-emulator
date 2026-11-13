@@ -8,7 +8,9 @@ from maa.agent.agent_server import AgentServer
 from maa.toolkit import Toolkit
 
 import my_action
+import my_counts
 import my_reco
+import my_verify
 import my_wait
 
 
