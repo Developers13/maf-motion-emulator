@@ -189,12 +189,27 @@ maf-motion-emulator/
 ├── tools/
 │   ├── e2e.py               # CLI entry: batch / single-student runs
 │   ├── run_task.py          # low-level: run one pipeline entry against adb
+│   ├── setup_runtime.ps1    # one-shot maafw + OCR model setup
 │   ├── install.py           # release packaging
 │   └── validate_schema.py   # pipeline/interface schema validation
 └── user-list.json           # credentials — local only, gitignored
 ```
 
 ## Local development
+
+### One-shot runtime setup
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/setup_runtime.ps1
+```
+
+This installs the `maafw` Python bindings (skipped if already importable) and
+downloads `ppocr_v6-small` into `assets/resource/model/ocr/` (skipped if the
+directory already has files). Use `-Force` to reinstall/redownload,
+`-PythonLauncher python` if `py` is not available, and `-Pre` to install a
+pre-release `maafw`.
+
+The manual steps below are equivalent.
 
 1. Install the Python bindings: `pip install maafw` (debugger: `pip install MaaDebugger`)
 2. Prepare the OCR model (either):

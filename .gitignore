@@ -502,6 +502,9 @@ htmlcov/
 # Node：已由上方 node_modules/ 覆盖；此处补包管理器本地状态
 .npm/
 .yarn/
+# 根目录误用 pnpm 生成的锁文件：根项目用 npm（CI 为 npm ci，锁文件是 package-lock.json），
+# GUI 用 gui/pnpm-lock.yaml；根 pnpm-lock.yaml 属本地残留，不提交。
+/pnpm-lock.yaml
 
 # 通用构建产物目录（与上方 build / install 同类）
 dist/
@@ -532,3 +535,8 @@ desktop.ini
 # 本地日志与崩溃转储（*.log 已在上方覆盖，此处补转储）
 *.dmp
 *.stackdump
+
+# ============================================================================
+# 本地 issue tracker（.scratch/<feature>/issues/，工作票据不入库）
+# ============================================================================
+.scratch/
