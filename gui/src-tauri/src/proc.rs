@@ -267,15 +267,38 @@ fn stream_lines<R: Read + Send + 'static>(reader: R, is_error: bool, sink: LineS
             match reader.read_until(b'\n', &mut buffer) {
                 Ok(0) => break,
                 Ok(_) => {
-                    let text = String::from_utf8_lossy(&buffer)
-                        .trim_end_matches(|c| c == '\r' || c == '\n')
-                        .to_string();
-                    sink(is_error, text);
+                    let raw = String::from_utf8_lossy(&buffer);
+                    let text =
+                        strip_ansi(raw.trim_end_matches(|c| c == '\r' || c == '\n'));
+                    sink(is_error, text.to_string());
                 }
                 Err(_) => break,
             }
         }
     });
+}
+
+/// MaaFW 等程序会往 stdout 写 ANSI 颜色序列；界面按纯文本渲染，
+/// 不剥掉会显示成 `[31m…[0m` 这样的乱码。这里剥掉 CSI 序列。
+fn strip_ansi(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\u{1b}' {
+            out.push(c);
+            continue;
+        }
+        if chars.peek() == Some(&'[') {
+            chars.next();
+            // CSI：参数/中间字节后以 0x40–0x7E 范围的字节结束。
+            while let Some(n) = chars.next() {
+                if ('\u{40}'..='\u{7e}').contains(&n) {
+                    break;
+                }
+            }
+        }
+    }
+    out
 }
 
 /// 兜底：用系统 taskkill 杀掉指定 pid 及其后代（Job 不可用时的退路）。
@@ -401,5 +424,15 @@ mod tests {
         process.terminate();
         let code = process.wait(Duration::from_secs(5));
         assert!(code.is_ok(), "job termination did not stop the child");
+    }
+
+    #[test]
+    fn strip_ansi_removes_color_codes() {
+        assert_eq!(
+            strip_ansi("\u{1b}[31m[2026-11-15][ERR] boom\u{1b}[0m"),
+            "[2026-11-15][ERR] boom"
+        );
+        assert_eq!(strip_ansi("plain line"), "plain line");
+        assert_eq!(strip_ansi("\u{1b}[1;32mgreen\u{1b}[0m tail"), "green tail");
     }
 }

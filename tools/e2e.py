@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 # 批量/单跑入口：从项目根 user-list.json 读凭证（在内存与环境变量间流转，不落日志），
@@ -70,6 +71,30 @@ def resolve_adb_address(student_id: str):
     return None, f"no MuMu instance named '{student_id}' (have: {names})"
 
 
+def ensure_adb_server():
+    """预启动 adb server，并让它的 stdio 脱离本进程的管道。
+
+    MaaFW 连设备时若 server 未在运行，会现场孵化一个常驻守护进程；它会继承
+    孵化者进程链上的可继承句柄。若孵化发生在捕获管道的子进程里，守护进程就
+    抓住管道写端不放，上层 subprocess 永远等不到 EOF（2026-11-15 实测把
+    probe_counts 卡死）。这里先用 DEVNULL stdio 把 server 拉起来，之后 MaaFW
+    只复用现有 server，不再自己孵守护进程。失败不阻断——MaaFW 会自己再试。
+    """
+    adb = os.path.join(os.path.dirname(MUMU_MANAGER), "adb.exe")
+    if not Path(adb).exists():
+        adb = "adb"
+    try:
+        subprocess.run(
+            [adb, "start-server"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+        )
+    except Exception as e:  # noqa: BLE001 - 预启动失败只记录，不阻断正式运行
+        print(f"[e2e] adb start-server skipped: {type(e).__name__}: {e}", flush=True)
+
+
 args = sys.argv[1:]
 dry_run = "--dry-run" in args
 # 只有批量运行（GUI 传 --skip-if-done）才在达到上限时跳过；手动单选始终强制运行。
@@ -88,28 +113,36 @@ def probe_counts(address: str, timeout_sec: int = 240):
 
     探针自身 fail-open（读不到也退出 0），这里再兜一层超时/异常——读数失败
     绝不能阻断正式运行。
+    输出重定向到临时文件而不是管道：run_task 里的 MaaFW 可能孵化 adb server
+    守护进程，它会继承管道写端导致 EOF 永不到来（且 Windows 上 subprocess
+    超时路径会重新 join 读线程，同样卡死）。临时文件的句柄被谁持有都不影响
+    我们在子进程退出后直接读文件。
     """
     try:
-        r = subprocess.run(
-            [sys.executable, "tools/run_task.py", "ReadCounts", address],
-            cwd=str(project_dir),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout_sec,
-        )
-    except Exception as e:  # noqa: BLE001
+        with tempfile.TemporaryFile("w+", encoding="utf-8", errors="replace") as out:
+            r = subprocess.run(
+                [sys.executable, "tools/run_task.py", "ReadCounts", address],
+                cwd=str(project_dir),
+                stdout=out,
+                stderr=subprocess.STDOUT,
+                timeout=timeout_sec,
+            )
+            out.seek(0)
+            text = out.read()
+    except Exception as e:  # noqa: BLE001 - 启动/超时失败都归为解析失败
         print(f"[e2e] counts probe failed: {type(e).__name__}: {e}", flush=True)
         return None
 
-    for line in (r.stdout or "").splitlines():
+    for line in text.splitlines():
         m = _COUNTS_RE.search(line)
         if m:
             week, total = int(m.group(1)), int(m.group(2))
             if week >= 0 and total >= 0:
                 return week, total
-    tail = ((r.stdout or "").strip().splitlines() or ["<no stdout>"])[-1]
+    # 优先显示探针自己打的那一行（[counts] week=.. / failed=..）：只取最后一行
+    # 会被 "task ReadCounts succeeded=True" 盖住，把真正的失败原因藏起来。
+    counts_line = next((line for line in text.splitlines() if "[counts]" in line), None)
+    tail = counts_line or (text.strip().splitlines() or ["<no output>"])[-1]
     print(f"[e2e] counts probe gave no result (exit {r.returncode}): {tail}", flush=True)
     return None
 
@@ -125,6 +158,11 @@ if only is not None:
 
 failed = []
 skipped = []
+
+# 先把 adb server 拉起来（stdio 指向 NUL），避免 MaaFW 在捕获管道的进程链里
+# 孵化常驻守护进程。server 会随本进程的 Job 一起退出，下个学号重新拉起即可。
+ensure_adb_server()
+
 for row in rows:
     sid = str(row["student_id"])
     if only and sid != only:
