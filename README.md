@@ -1,6 +1,6 @@
 # MAF Motion Emulator
 
-NPU sports after-class exercise automation: route simulation via [Motion Emulator](https://github.com/zhufucdev/MotionEmulator) plus exercise check-in on the NPU Sports app (西工大体育), running on MuMu and other Android emulators. Powered by **[MaaFramework](https://github.com/MaaXYZ/MaaFramework)**!
+NPU sports after-class exercise automation: route simulation via [Motion Emulator](https://github.com/zhufucdev/MotionEmulator) plus exercise check-in on the NPU Sports app, running on MuMu and other Android emulators. Powered by **[MaaFramework](https://github.com/MaaXYZ/MaaFramework)**!
 
 > Successor of the PowerShell/adb-based `motion-emulate-automation` skill — rewritten on MaaFramework: image-recognition driven, low-code pipeline, ships with the generic UI and CI/CD.
 
@@ -120,7 +120,7 @@ running instance except the template:
 
 ```powershell
 .\gui\scripts\mumu.ps1 -Action shutdown-all                          # close all students' instances
-.\gui\scripts\mumu.ps1 -Action shutdown-all -KeepStudentId 2025302319  # keep only this student's
+.\gui\scripts\mumu.ps1 -Action shutdown-all -KeepStudentId 2025XXXXXX  # keep only this student's
 ```
 
 The template instance (default 模板) is never closed by `shutdown-all`; it is the
@@ -141,7 +141,7 @@ Batch (every row in `user-list.json`) or a single student:
 
 ```bash
 python tools/e2e.py              # all rows
-python tools/e2e.py 2025302319   # one student
+python tools/e2e.py 2025XXXXXX   # one student
 python tools/e2e.py --dry-run    # print each student's target adb address, run nothing
 ```
 
@@ -206,7 +206,7 @@ plaintext passwords.
 
 ```json
 [
-  { "student_id": "2025302319", "password": "...", "distance_km": 3.2 }
+  { "student_id": "2025XXXXXX", "password": "...", "distance_km": 3.2 }
 ]
 ```
 
