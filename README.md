@@ -4,6 +4,8 @@ NPU sports after-class exercise automation: route simulation via [Motion Emulato
 
 > Successor of the PowerShell/adb-based `motion-emulate-automation` skill — rewritten on MaaFramework: image-recognition driven, low-code pipeline, ships with the generic UI and CI/CD.
 
+For a role-based orientation (end users vs. developers), see [AGENTS.md](AGENTS.md).
+
 ## Features
 
 - **Log in to NPU Sports**: privacy dialog → guide pages → CAS unified authentication (account = student ID, password passed in memory only)
@@ -35,7 +37,7 @@ Download a Windows GUI asset from [Releases](../../releases):
 - **Portable**: `MAF-motion-emulator-gui-win-x64-*.zip` — extract to a **writable folder** (for example `D:\MAF-Motion-Emulator`, not `Program Files`).
 - **Installer**: `MAF Motion Emulator_*_x64-setup.exe` — run the installer.
 
-Both packages include `tools/`, `gui/scripts/`, `agent/`, `assets/` (including the OCR model) and the README.
+Both packages include `tools/`, `gui/scripts/`, `agent/`, `assets/` (including the OCR model), the README, and AGENTS.md.
 
 ### 2. Install MaaFW (Python dependency)
 
@@ -271,6 +273,7 @@ maf-motion-emulator/
 │   ├── package_gui_win.ps1  # portable Windows GUI runtime zip
 │   ├── install.py           # release packaging
 │   └── validate_schema.py   # pipeline/interface schema validation
+├── AGENTS.md                # end-user setup + developer reference
 └── user-list.json           # credentials — local only, gitignored
 ```
 

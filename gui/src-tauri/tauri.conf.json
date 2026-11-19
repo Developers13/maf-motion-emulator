@@ -36,6 +36,7 @@
       "../scripts": "gui/scripts",
       "../tools/nemu": "gui/tools/nemu",
       "../../README.md": "README.md",
+      "../../AGENTS.md": "AGENTS.md",
       "../../docs": "docs"
     },
     "icon": [

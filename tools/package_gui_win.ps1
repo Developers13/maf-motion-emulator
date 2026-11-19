@@ -84,6 +84,10 @@ $readme = Join-Path $projectRoot 'README.md'
 if (Test-Path -LiteralPath $readme) {
     Copy-Item -LiteralPath $readme -Destination (Join-Path $stage 'README.md')
 }
+$agents = Join-Path $projectRoot 'AGENTS.md'
+if (Test-Path -LiteralPath $agents) {
+    Copy-Item -LiteralPath $agents -Destination (Join-Path $stage 'AGENTS.md')
+}
 $docs = Join-Path $projectRoot 'docs'
 if (Test-Path -LiteralPath $docs) {
     Copy-Item -LiteralPath $docs -Destination (Join-Path $stage 'docs') -Recurse
