@@ -3,7 +3,7 @@
     // 协议文档：https://maafw.com/docs/3.1-PipelineProtocol
     //
     // 业务背景（来自 motion-emulate-automation 的实测经验）：
-    // - 西工大体育 (net.crigh.xbgysport)：首次启动有 隐私协议弹窗(同意) → 引导页(3次左滑 → tv_start)
+    // - NPU Sports (net.crigh.xbgysport)：首次启动有 隐私协议弹窗(同意) → 引导页(3次左滑 → tv_start)
     //   → 登录页(勾选 checkRule 协议 → btn_login 进 CAS webview → username/password → 登录)
     // - Motion Emulator (com.zhufucdev.motion_emulator)：首页是单列滚动卡片，模拟 卡在最底部
     //   → 表单 dropdown_trace(需已选路线) / input_repeat_count(2.4km→6, 3.2km→8) / btn_run_emulation

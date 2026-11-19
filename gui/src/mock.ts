@@ -37,17 +37,17 @@ const bootstrap: Bootstrap = {
   project_root: "C:\\Users\\Vincent\\Documents\\dsh-workspace\\maf-motion-emulator",
   settings,
   user_rows: [
-    { student_id: "2025302319", password: "demo-pass", distance_km: 3.2 },
-    { student_id: "2025301348", password: "demo-pass", distance_km: 3.2 },
-    { student_id: "2025302323", password: "demo-pass", distance_km: 2.4 },
-    { student_id: "2025301107", password: "demo-pass", distance_km: 3.2 },
-    { student_id: "2025300891", password: "demo-pass", distance_km: null },
+    { student_id: "2025000001", password: "demo-pass", distance_km: 3.2 },
+    { student_id: "2025000002", password: "demo-pass", distance_km: 3.2 },
+    { student_id: "2025000003", password: "demo-pass", distance_km: 2.4 },
+    { student_id: "2025000004", password: "demo-pass", distance_km: 3.2 },
+    { student_id: "2025000005", password: "demo-pass", distance_km: null },
   ],
   statuses: {
-    "2025302319": { Week: 0, Total: 33, WeekKey: weekKey(), ReadAt: iso(12), Confirmed: true, LastRunDay: "2026-11-14" },
-    "2025301348": { Week: 5, Total: 21, WeekKey: weekKey(), ReadAt: iso(140), Confirmed: true, LastRunDay: "2026-11-14" },
-    "2025302323": { Week: 2, Total: 30, WeekKey: weekKey(), ReadAt: iso(300), Confirmed: false, LastRunDay: dayKey() },
-    "2025301107": { Week: 1, Total: 4, WeekKey: "2000-01-03", ReadAt: iso(12000), Confirmed: true, LastRunDay: "2000-01-03" },
+    "2025000001": { Week: 0, Total: 33, WeekKey: weekKey(), ReadAt: iso(12), Confirmed: true, LastRunDay: "2026-11-14" },
+    "2025000002": { Week: 5, Total: 21, WeekKey: weekKey(), ReadAt: iso(140), Confirmed: true, LastRunDay: "2026-11-14" },
+    "2025000003": { Week: 2, Total: 30, WeekKey: weekKey(), ReadAt: iso(300), Confirmed: false, LastRunDay: dayKey() },
+    "2025000004": { Week: 1, Total: 4, WeekKey: "2000-01-03", ReadAt: iso(12000), Confirmed: true, LastRunDay: "2000-01-03" },
   },
   script_hosts: [
     { path: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", label: "Windows PowerShell 5.1" },
@@ -78,20 +78,20 @@ interface Handlers {
 }
 
 const seedLines: Array<[string, boolean]> = [
-  ["[mumu] READY index=0 port=16384 name=2025302319", false],
+  ["[mumu] READY index=0 port=16384 name=2025000001", false],
   ["[adb-prep] CONNECTED 127.0.0.1:16384", false],
   ["[adb-prep] MODEL MuMu 12", false],
   ["[adb-prep] MAGISK v27.2-kitsune-4", false],
   ["[adb-prep] LSPOSED LOADED", false],
-  ["[e2e] === 2025302319 laps=8 target_km=3.3 adb=127.0.0.1:16384 ===", false],
-  ["[e2e] COUNTS sid=2025302319 week=0 total=33", false],
-  ["[e2e] SKIP sid=2025302319 reason=total week=0/5 total=33/32", false],
-  ["=== Batch run (2/3): 2025302323 ===", false],
+  ["[e2e] === 2025000001 laps=8 target_km=3.3 adb=127.0.0.1:16384 ===", false],
+  ["[e2e] COUNTS sid=2025000001 week=0 total=33", false],
+  ["[e2e] SKIP sid=2025000001 reason=total week=0/5 total=33/32", false],
+  ["=== Batch run (2/3): 2025000003 ===", false],
   ["[wait_exercise_finish] km=1.24/3.3 elapsed=420s", false],
   ["[wait_exercise_finish] km=2.87/3.3 elapsed=880s", false],
   ["[wait_exercise_finish] TARGET REACHED km=3.31 >= 3.3 elapsed=1010s", false],
-  ["[batch] 2025302323 -> FAILED (exit code 2)", true],
-  ["[mumu] WARN shutdown 2025302323 failed: exit code 1", false],
+  ["[batch] 2025000003 -> FAILED (exit code 2)", true],
+  ["[mumu] WARN shutdown 2025000003 failed: exit code 1", false],
 ];
 
 export function createMockBackend(): {

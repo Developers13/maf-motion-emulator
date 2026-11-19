@@ -190,7 +190,7 @@ mod tests {
             template_vm_name: String::new(),
             week_limit: 0,
             total_limit: 0,
-            selected_students: vec!["2025302319".into(), "  ".into()],
+            selected_students: vec!["2025000001".into(), "  ".into()],
             ..AppSettings::default()
         }
         .normalize();
@@ -199,7 +199,7 @@ mod tests {
         assert_eq!(settings.mumu_manager_path, DEFAULT_MUMU_MANAGER);
         assert_eq!(settings.week_limit, 5);
         assert_eq!(settings.total_limit, 32);
-        assert_eq!(settings.selected_students, vec!["2025302319".to_string()]);
+        assert_eq!(settings.selected_students, vec!["2025000001".to_string()]);
     }
 
     #[test]
@@ -228,7 +228,7 @@ mod tests {
             "PythonLauncher": "python",
             "Environment": {"PYTHONUTF8": "1"},
             "WeekLimit": 4,
-            "SelectedStudents": ["2025302319"]
+            "SelectedStudents": ["2025000001"]
         }"#;
         let parsed: AppSettings = serde_json::from_str(json).unwrap();
         let settings = parsed.normalize();
@@ -238,7 +238,7 @@ mod tests {
         assert!(settings.skip_on_confirmed_counts); // 缺字段回退默认（开）
         assert_eq!(settings.execution_mode, "serial"); // 缺字段回退默认
         assert_eq!(settings.parallel_vm_count, 2); // 缺字段回退默认
-        assert_eq!(settings.selected_students, vec!["2025302319".to_string()]);
+        assert_eq!(settings.selected_students, vec!["2025000001".to_string()]);
     }
 
     #[test]

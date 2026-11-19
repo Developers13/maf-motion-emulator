@@ -3,7 +3,7 @@
     // 文档：https://maafw.com/docs/3.3-ProjectInterfaceV2
     "interface_version": 2,
     "name": "MAF Motion Emulator",
-    "description": "西工大体育课外锻炼模拟助手：Motion Emulator 路线模拟 + 西工大体育课外锻炼打卡，跑在 MuMu 等 Android 模拟器上。由 MaaFramework 强力驱动。",
+    "description": "体育课外锻炼模拟助手：Motion Emulator 路线模拟 + NPU Sports 课外锻炼打卡，跑在 MuMu 等 Android 模拟器上。由 MaaFramework 强力驱动。",
     "version": "0.1.0",
     "controller": [
         {
@@ -32,7 +32,7 @@
             "entry": "FullRun"
         },
         {
-            "name": "登录西工大体育",
+            "name": "登录 NPU Sports",
             "entry": "SportLogin"
         },
         {

@@ -313,21 +313,21 @@ mod tests {
     #[test]
     fn parses_counts_line() {
         assert_eq!(
-            parse_counts("[e2e] COUNTS sid=2025302319 week=0 total=33"),
-            Some(("2025302319".into(), 0, 33))
+            parse_counts("[e2e] COUNTS sid=2025000001 week=0 total=33"),
+            Some(("2025000001".into(), 0, 33))
         );
     }
 
     #[test]
     fn rejects_failed_probe_counts() {
-        assert_eq!(parse_counts("[e2e] COUNTS sid=2025302319 week=-1 total=-1"), None);
+        assert_eq!(parse_counts("[e2e] COUNTS sid=2025000001 week=-1 total=-1"), None);
     }
 
     #[test]
     fn parses_skip_line() {
         assert_eq!(
-            parse_skip("[e2e] SKIP sid=2025302319 reason=total week=0/5 total=33/32"),
-            Some("2025302319".into())
+            parse_skip("[e2e] SKIP sid=2025000001 reason=total week=0/5 total=33/32"),
+            Some("2025000001".into())
         );
         assert_eq!(parse_skip("nothing here"), None);
     }

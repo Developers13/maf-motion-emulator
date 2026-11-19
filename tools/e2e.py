@@ -9,7 +9,7 @@ from pathlib import Path
 # 批量/单跑入口：从项目根 user-list.json 读凭证（在内存与环境变量间流转，不落日志），
 # 逐行调用 tools/run_task.py。用法：
 #   python tools/e2e.py                 # 跑全部行
-#   python tools/e2e.py 2025302319      # 只跑指定学号
+#   python tools/e2e.py 2025XXXXXX      # 只跑指定学号
 #   python tools/e2e.py --dry-run       # 只解析并打印每个学号的目标 adb 地址，不执行
 # 行格式：{ "student_id": "...", "password": "...", "distance_km": 3.2 }
 #

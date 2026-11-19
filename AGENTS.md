@@ -306,7 +306,7 @@ are not trusted to confirm the estimate.
 
 ```json
 [
-  { "student_id": "2025302319", "password": "...", "distance_km": 3.2 }
+  { "student_id": "2025XXXXXX", "password": "...", "distance_km": 3.2 }
 ]
 ```
 
