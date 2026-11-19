@@ -255,12 +255,12 @@ fn handle_e2e_line(
     line: &str,
 ) {
     if let Some((counts_sid, week, total)) = parse_counts(line) {
-        let (week_key, read_at) = {
+        let (week_key, read_at, confirmed) = {
             let mut map = state.statuses.lock().unwrap();
             status::set_from_read(&mut map, &counts_sid, week, total);
             let _ = status::save(&paths::status_path(&state.root), &map);
             let entry = map.get(&counts_sid).cloned().unwrap_or_default();
-            (entry.week_key, entry.read_at)
+            (entry.week_key, entry.read_at, entry.confirmed)
         };
         events::counts(
             app,
@@ -270,6 +270,7 @@ fn handle_e2e_line(
                 total,
                 week_key,
                 read_at,
+                confirmed,
             },
         );
     }
@@ -536,12 +537,12 @@ fn shutdown_student(state: &Arc<AppState>, app: &AppHandle, sid: &str) {
 }
 
 fn increment_and_emit(state: &Arc<AppState>, app: &AppHandle, sid: &str) {
-    let (week_key, read_at, week, total) = {
+    let (week_key, read_at, week, total, confirmed) = {
         let mut map = state.statuses.lock().unwrap();
         status::increment_after_success(&mut map, sid);
         let _ = status::save(&paths::status_path(&state.root), &map);
         let entry = map.get(sid).cloned().unwrap_or_default();
-        (entry.week_key, entry.read_at, entry.week, entry.total)
+        (entry.week_key, entry.read_at, entry.week, entry.total, entry.confirmed)
     };
     events::counts(
         app,
@@ -551,8 +552,36 @@ fn increment_and_emit(state: &Arc<AppState>, app: &AppHandle, sid: &str) {
             total,
             week_key,
             read_at,
+            confirmed,
         },
     );
+}
+
+/// 缓存预跳过：两条规则（原 run_batch 内联逻辑）。
+/// 1. 已实读确认（Confirmed=true）且达上限——上次开模拟器已验证过；
+/// 2. +1 待审核估算达上限、且读数尚不可信（同日，或次日清晨 06:00 前，
+///    审核每日凌晨进行）——开模拟器也读不出真值，按估算直接跳过。
+/// 其余待审核值不跳过：审核时点过后由探针实读确认。
+fn pre_skip_entry(
+    state: &Arc<AppState>,
+    sid: &str,
+) -> Option<(&'static str, status::ExerciseStatus, u32, u32)> {
+    let (skip_enabled, week_limit, total_limit) = {
+        let s = state.settings.lock().unwrap();
+        (s.skip_on_confirmed_counts, s.week_limit, s.total_limit)
+    };
+    if !skip_enabled {
+        return None;
+    }
+    let now = chrono::Local::now();
+    let entry = state.statuses.lock().unwrap().get(sid).cloned()?;
+    if status::confirmed_at_cap(&entry, week_limit, total_limit, &now) {
+        Some(("已实读确认", entry, week_limit, total_limit))
+    } else if status::pending_estimate_at_cap(&entry, week_limit, total_limit, &now) {
+        Some(("待审核估算", entry, week_limit, total_limit))
+    } else {
+        None
+    }
 }
 
 pub fn start(state: Arc<AppState>, app: AppHandle, students: Vec<String>) {
@@ -678,6 +707,26 @@ fn run_batch(state: &Arc<AppState>, app: &AppHandle, students: &[String]) {
             &format!("批量运行 {sid} ({progress}/{total})…"),
             "info",
         );
+
+        if let Some((reason, entry, week_limit, total_limit)) = pre_skip_entry(&state, &sid) {
+            skipped.push(sid.clone());
+            events::log(
+                app,
+                "gui",
+                &format!(
+                    "[batch] {sid} -> SKIP ({reason}: week={}/{week_limit} total={}/{total_limit})",
+                    entry.week, entry.total
+                ),
+                false,
+            );
+            events::toast(
+                app,
+                "neutral",
+                &format!("批量运行 ({progress}/{total}) 跳过"),
+                &format!("{sid} 次数已达上限（{reason}），未开模拟器直接跳过。"),
+            );
+            continue;
+        }
 
         shutdown_instances(state, app, Some(sid), Duration::from_secs(5 * MINUTE));
         if state.stop.load(Ordering::SeqCst) {

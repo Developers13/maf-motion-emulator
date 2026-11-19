@@ -11,6 +11,17 @@ export interface ExerciseStatus {
   Total: number;
   WeekKey: string;
   ReadAt: string;
+  /**
+   * 次数是否经 App 实读确认：探针读数=true，成功后本地 +1=false（"待审核"
+   * 估算）。只有 Confirmed=true 的达上限状态才能触发批量预跳过。
+   */
+  Confirmed: boolean;
+  /**
+   * 最后一次成功运行的本地日期 yyyy-MM-dd（审核每日凌晨进行，当天读数不含
+   * 当天待审核记录）。仅后端写入与读数合并时使用；COUNTS 事件不带此字段，
+   * 故为可选。
+   */
+  LastRunDay?: string;
 }
 
 export type ExerciseStatusMap = Record<string, ExerciseStatus>;
@@ -38,9 +49,38 @@ export function weekKeyFor(now: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
+/** 本地日期键 yyyy-MM-dd（"哪一天"，与 WeekKey 的"哪一周"相对）。 */
+export function dayKeyFor(now: Date): string {
+  const d = new Date(now.getTime());
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** 某状态是否为「当前自然周」（默认以系统当前时间为参照）。 */
 export function weekIsCurrent(status: ExerciseStatus, now?: Date): boolean {
   return status.WeekKey === weekKeyFor(now ?? new Date());
+}
+
+/**
+ * 已确认（App 实读）且达到任一上限 → 批量可直接跳过、不开模拟器。
+ * 与后端 status.rs 的 confirmed_at_cap 同一套规则：
+ * - 必须Confirmed=true（+1 估算不算）；
+ * - 周上限要求 WeekKey 属于当前自然周；
+ * - 总次数单调递增，无自然周限制。
+ */
+export function isConfirmedAtCap(
+  status: ExerciseStatus,
+  weekLimit: number,
+  totalLimit: number,
+  now?: Date,
+): boolean {
+  if (!status.Confirmed) {
+    return false;
+  }
+  return (
+    (weekIsCurrent(status, now) && status.Week >= weekLimit) ||
+    status.Total >= totalLimit
+  );
 }
 
 /**
@@ -58,6 +98,9 @@ export function setFromRead(
     Total: Math.max(0, total),
     WeekKey: weekKeyFor(d),
     ReadAt: d.toISOString(),
+    Confirmed: true,
+    // TS 层只做镜像展示；同日/隔日合并由后端 set_from_read 决定。
+    LastRunDay: "",
   };
 }
 
@@ -85,6 +128,8 @@ export function incrementAfterSuccess(
       Total: 1,
       WeekKey: currentKey,
       ReadAt: d.toISOString(),
+      Confirmed: false,
+      LastRunDay: dayKeyFor(d),
     };
   } else {
     const weekBase = prev.WeekKey === currentKey ? prev.Week : 0;
@@ -93,6 +138,9 @@ export function incrementAfterSuccess(
       Total: prev.Total + 1,
       WeekKey: currentKey,
       ReadAt: d.toISOString(),
+      // +1 估算置为待审核：隔日实读确认后才能免读跳过。
+      Confirmed: false,
+      LastRunDay: dayKeyFor(d),
     };
   }
   return nextMap;
@@ -126,6 +174,9 @@ function toStatusEntry(value: unknown): ExerciseStatus {
       typeof obj.Total === "number" && Number.isFinite(obj.Total) ? obj.Total : 0,
     WeekKey: typeof obj.WeekKey === "string" ? obj.WeekKey : "",
     ReadAt: typeof obj.ReadAt === "string" ? obj.ReadAt : "",
+    // 旧文件缺字段按 false：首次批量仍实读确认一次，之后才免读跳过。
+    Confirmed: obj.Confirmed === true,
+    LastRunDay: typeof obj.LastRunDay === "string" ? obj.LastRunDay : "",
   };
 }
 

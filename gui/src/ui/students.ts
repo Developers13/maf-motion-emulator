@@ -11,6 +11,9 @@ function tooltipFor(id: string): string {
   if (!weekIsCurrent(status)) {
     text += "\n（本周次数待重读：上次读数属于上一自然周）";
   }
+  if (status.Confirmed === false) {
+    text += "\n（待审核：含 +1 估算，批量预跳过前会先实读确认）";
+  }
   const readAt = new Date(status.ReadAt);
   if (!Number.isNaN(readAt.getTime())) {
     const pad = (n: number) => String(n).padStart(2, "0");

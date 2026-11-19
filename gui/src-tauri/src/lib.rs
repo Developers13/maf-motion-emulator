@@ -66,6 +66,44 @@ fn list_script_hosts() -> Vec<hosts::ScriptHost> {
     hosts::scan()
 }
 
+/// 手动填写/清除某学号的次数缓存。
+///
+/// `week`/`total` 都为 None → 清除该学号缓存；都为 Some → 记为"已确认"（参与
+/// 批量预跳过），下一次 App 实读会覆盖。只填一个视为失败，避免半套数据。
+#[tauri::command]
+fn save_student_counts(
+    app: AppHandle,
+    state: State<'_, Arc<AppState>>,
+    student: String,
+    week: Option<u32>,
+    total: Option<u32>,
+) -> Result<(), String> {
+    if student.trim().is_empty() {
+        return Err("学号为空。".into());
+    }
+    let mut map = state.statuses.lock().unwrap();
+    match (week, total) {
+        (Some(week), Some(total)) => status::set_manual(&mut map, &student, week, total),
+        (None, None) => status::clear(&mut map, &student),
+        _ => return Err("本周次数与总次数必须同时填写或同时留空。".into()),
+    }
+    status::save(&paths::status_path(&state.root), &map).map_err(|e| e.to_string())?;
+    if let Some(entry) = map.get(&student) {
+        events::counts(
+            &app,
+            events::CountsEvent {
+                student: student.clone(),
+                week: entry.week,
+                total: entry.total,
+                week_key: entry.week_key.clone(),
+                read_at: entry.read_at.clone(),
+                confirmed: entry.confirmed,
+            },
+        );
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn start_run(
     app: AppHandle,
@@ -143,6 +181,7 @@ pub fn run() {
             bootstrap,
             save_settings,
             save_user_rows,
+            save_student_counts,
             list_script_hosts,
             start_run,
             stop_run,

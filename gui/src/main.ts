@@ -268,6 +268,7 @@ function onCounts(counts: CountsEvent): void {
     Total: counts.total,
     WeekKey: counts.week_key,
     ReadAt: counts.read_at,
+    Confirmed: counts.confirmed,
   };
   renderStudentList(toggleStudent);
 }
@@ -312,7 +313,10 @@ async function boot(): Promise<void> {
   if (!runningInTauri()) {
     if (location.hash.startsWith("#settings")) {
       openSettings();
-      document.querySelector<HTMLButtonElement>("#settings-backdrop .tab[data-tab='env']")?.click();
+      // 深链接默认停在用户列表；#settings-env 才切到运行环境（截图/联调用）。
+      if (location.hash === "#settings-env") {
+        document.querySelector<HTMLButtonElement>("#settings-backdrop .tab[data-tab='env']")?.click();
+      }
     } else if (location.hash === "#running") {
       await api.startRun(selectedInOrder().slice(0, 3));
     }

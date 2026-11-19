@@ -17,6 +17,7 @@ export interface AppSettings {
   SelectedStudents: string[];
   WeekLimit: number;
   TotalLimit: number;
+  SkipOnConfirmedCounts: boolean;
   AutoScroll: boolean;
 }
 
@@ -34,6 +35,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   SelectedStudents: [],
   WeekLimit: 5,
   TotalLimit: 32,
+  SkipOnConfirmedCounts: true,
   AutoScroll: true,
 };
 
@@ -85,6 +87,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       : { PYTHONUTF8: "1" };
 
   const scrollValue = r["AutoScroll"];
+  const skipValue = r["SkipOnConfirmedCounts"];
   return {
     PythonLauncher: isNonEmptyString(r.PythonLauncher)
       ? r.PythonLauncher
@@ -108,6 +111,8 @@ export function normalizeSettings(raw: unknown): AppSettings {
       : [],
     WeekLimit: positiveLimit(r.WeekLimit, DEFAULT_SETTINGS.WeekLimit),
     TotalLimit: positiveLimit(r.TotalLimit, DEFAULT_SETTINGS.TotalLimit),
+    SkipOnConfirmedCounts:
+      typeof skipValue === "boolean" ? skipValue : true,
     AutoScroll:
       typeof scrollValue === "boolean" ? scrollValue : true,
   };
@@ -127,6 +132,7 @@ export function serializeSettings(s: AppSettings): string {
     SelectedStudents: s.SelectedStudents,
     WeekLimit: s.WeekLimit,
     TotalLimit: s.TotalLimit,
+    SkipOnConfirmedCounts: s.SkipOnConfirmedCounts,
   };
   const lastKey = "AutoScroll";
   ordered[lastKey] = s[lastKey];

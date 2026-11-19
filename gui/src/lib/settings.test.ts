@@ -97,6 +97,13 @@ describe("normalizeSettings", () => {
     expect(normalizeSettings({ AutoScroll: true }).AutoScroll).toBe(true);
   });
 
+  it("SkipOnConfirmedCounts: non-boolean → true; real booleans kept", () => {
+    expect(normalizeSettings({}).SkipOnConfirmedCounts).toBe(true);
+    expect(normalizeSettings({ SkipOnConfirmedCounts: "yes" }).SkipOnConfirmedCounts).toBe(true);
+    expect(normalizeSettings({ SkipOnConfirmedCounts: false }).SkipOnConfirmedCounts).toBe(false);
+    expect(normalizeSettings({ SkipOnConfirmedCounts: true }).SkipOnConfirmedCounts).toBe(true);
+  });
+
   it("ignores unknown fields", () => {
     const s = normalizeSettings({ Foo: "bar", Bar: 1, PythonLauncher: "py" } as unknown);
     expect(s).not.toHaveProperty("Foo");
@@ -118,6 +125,7 @@ describe("serializeSettings", () => {
       SelectedStudents: ["a", "b"],
       WeekLimit: 7,
       TotalLimit: 40,
+      SkipOnConfirmedCounts: false,
       AutoScroll: false,
     };
     const expected = [
@@ -138,6 +146,7 @@ describe("serializeSettings", () => {
       "  ],",
       '  "WeekLimit": 7,',
       '  "TotalLimit": 40,',
+      '  "SkipOnConfirmedCounts": false,',
       '  "AutoScroll": false',
       "}",
     ].join("\n");
@@ -157,6 +166,7 @@ describe("serializeSettings", () => {
       "SelectedStudents",
       "WeekLimit",
       "TotalLimit",
+      "SkipOnConfirmedCounts",
       "AutoScroll",
     ];
     for (let i = 0; i < order.length - 1; i += 1) {

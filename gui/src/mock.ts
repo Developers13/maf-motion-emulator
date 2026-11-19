@@ -24,6 +24,7 @@ const settings: AppSettings = {
   SelectedStudents: [],
   WeekLimit: 5,
   TotalLimit: 32,
+  SkipOnConfirmedCounts: true,
   AutoScroll: true,
 };
 
@@ -41,10 +42,10 @@ const bootstrap: Bootstrap = {
     { student_id: "2025300891", password: "demo-pass", distance_km: null },
   ],
   statuses: {
-    "2025302319": { Week: 0, Total: 33, WeekKey: weekKey(), ReadAt: iso(12) },
-    "2025301348": { Week: 5, Total: 21, WeekKey: weekKey(), ReadAt: iso(140) },
-    "2025302323": { Week: 2, Total: 30, WeekKey: weekKey(), ReadAt: iso(300) },
-    "2025301107": { Week: 1, Total: 4, WeekKey: "2000-01-03", ReadAt: iso(12000) },
+    "2025302319": { Week: 0, Total: 33, WeekKey: weekKey(), ReadAt: iso(12), Confirmed: true, LastRunDay: "2026-11-14" },
+    "2025301348": { Week: 5, Total: 21, WeekKey: weekKey(), ReadAt: iso(140), Confirmed: true, LastRunDay: "2026-11-14" },
+    "2025302323": { Week: 2, Total: 30, WeekKey: weekKey(), ReadAt: iso(300), Confirmed: false, LastRunDay: dayKey() },
+    "2025301107": { Week: 1, Total: 4, WeekKey: "2000-01-03", ReadAt: iso(12000), Confirmed: true, LastRunDay: "2000-01-03" },
   },
   script_hosts: [
     { path: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", label: "Windows PowerShell 5.1" },
@@ -57,6 +58,12 @@ function weekKey(): string {
   const date = new Date();
   const sinceMonday = (date.getDay() + 6) % 7;
   date.setDate(date.getDate() - sinceMonday);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function dayKey(): string {
+  const date = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
@@ -107,6 +114,20 @@ export function createMockBackend(): {
     },
     async saveUserRows(rows) {
       bootstrap.user_rows = structuredClone(rows);
+    },
+    async saveStudentCounts(student, week, total) {
+      if (week === null || total === null) {
+        delete bootstrap.statuses[student];
+        return;
+      }
+      bootstrap.statuses[student] = {
+        Week: week,
+        Total: total,
+        WeekKey: weekKey(),
+        ReadAt: new Date().toISOString(),
+        Confirmed: true,
+        LastRunDay: "",
+      };
     },
     async listScriptHosts() {
       return structuredClone(bootstrap.script_hosts);

@@ -30,6 +30,8 @@ pub struct CountsEvent {
     pub total: u32,
     pub week_key: String,
     pub read_at: String,
+    /// true = App 实读确认；false = 本地 +1 估算（待审核）。
+    pub confirmed: bool,
 }
 
 #[derive(Serialize, Clone)]

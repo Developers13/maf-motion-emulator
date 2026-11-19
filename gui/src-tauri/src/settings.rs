@@ -39,6 +39,10 @@ fn default_auto_scroll() -> bool {
     true
 }
 
+fn default_skip_on_confirmed_counts() -> bool {
+    true
+}
+
 /// 与旧 `gui/gui-settings.json` 完全同构：PascalCase 字段名，不能改动，
 /// 否则用户已有配置会被当成默认值。
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -63,6 +67,10 @@ pub struct AppSettings {
     pub week_limit: u32,
     #[serde(rename = "TotalLimit", default = "default_total_limit")]
     pub total_limit: u32,
+    /// 批量运行时，若次数已经 App 实读确认且达上限，直接跳过、不开模拟器。
+    /// +1 估算（Confirmed=false）永远不触发预跳过。
+    #[serde(rename = "SkipOnConfirmedCounts", default = "default_skip_on_confirmed_counts")]
+    pub skip_on_confirmed_counts: bool,
     #[serde(rename = "AutoScroll", default = "default_auto_scroll")]
     pub auto_scroll: bool,
 }
@@ -80,6 +88,7 @@ impl Default for AppSettings {
             selected_students: Vec::new(),
             week_limit: default_week_limit(),
             total_limit: default_total_limit(),
+            skip_on_confirmed_counts: default_skip_on_confirmed_counts(),
             auto_scroll: default_auto_scroll(),
         }
     }
@@ -182,6 +191,7 @@ mod tests {
             "\"SelectedStudents\"",
             "\"WeekLimit\"",
             "\"TotalLimit\"",
+            "\"SkipOnConfirmedCounts\"",
             "\"AutoScroll\"",
         ] {
             assert!(json.contains(key), "missing {key}");
@@ -201,6 +211,7 @@ mod tests {
         assert_eq!(settings.python_launcher, "python");
         assert_eq!(settings.week_limit, 4);
         assert_eq!(settings.total_limit, 32); // 缺字段回退默认
+        assert!(settings.skip_on_confirmed_counts); // 缺字段回退默认（开）
         assert_eq!(settings.selected_students, vec!["2025302319".to_string()]);
     }
 }

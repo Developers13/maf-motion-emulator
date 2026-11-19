@@ -41,6 +41,8 @@ export interface CountsEvent {
   total: number;
   week_key: string;
   read_at: string;
+  /** true = App 实读确认；false = 本地 +1 估算（待审核）。 */
+  confirmed: boolean;
 }
 
 export interface ToastEvent {
@@ -53,6 +55,12 @@ export interface Backend {
   bootstrap(): Promise<Bootstrap>;
   saveSettings(settings: AppSettings): Promise<void>;
   saveUserRows(rows: UserRow[]): Promise<void>;
+  /** 手动填写次数：week/total 都为 null = 清除该学号缓存。 */
+  saveStudentCounts(
+    student: string,
+    week: number | null,
+    total: number | null,
+  ): Promise<void>;
   listScriptHosts(): Promise<ScriptHost[]>;
   startRun(ids: string[]): Promise<void>;
   stopRun(): Promise<void>;
@@ -63,6 +71,8 @@ const tauriBackend: Backend = {
   bootstrap: () => invoke<Bootstrap>("bootstrap"),
   saveSettings: (settings) => invoke<void>("save_settings", { settings }),
   saveUserRows: (rows) => invoke<void>("save_user_rows", { rows }),
+  saveStudentCounts: (student, week, total) =>
+    invoke<void>("save_student_counts", { student, week, total }),
   listScriptHosts: () => invoke<ScriptHost[]>("list_script_hosts"),
   startRun: (ids) => invoke<void>("start_run", { ids }),
   stopRun: () => invoke<void>("stop_run"),

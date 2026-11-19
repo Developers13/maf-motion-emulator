@@ -6,6 +6,7 @@ import {
   incrementAfterSuccess,
   parseStatusMap,
   serializeStatusMap,
+  isConfirmedAtCap,
   ExerciseStatusMap,
 } from "./status";
 
@@ -29,17 +30,17 @@ describe("weekKeyFor", () => {
 describe("weekIsCurrent", () => {
   it("true when WeekKey is the week of now, false otherwise", () => {
     const now = new Date(2026, 10, 13, 9, 0, 0);
-    expect(weekIsCurrent({ Week: 0, Total: 0, WeekKey: "2026-11-09", ReadAt: "" }, now)).toBe(true);
-    expect(weekIsCurrent({ Week: 0, Total: 0, WeekKey: "2026-11-02", ReadAt: "" }, now)).toBe(false);
+    expect(weekIsCurrent({ Week: 0, Total: 0, WeekKey: "2026-11-09", ReadAt: "", Confirmed: false }, now)).toBe(true);
+    expect(weekIsCurrent({ Week: 0, Total: 0, WeekKey: "2026-11-02", ReadAt: "", Confirmed: false }, now)).toBe(false);
     // 不传 now 用系统当前时间
     const todayKey = weekKeyFor(new Date());
-    expect(weekIsCurrent({ Week: 0, Total: 0, WeekKey: todayKey, ReadAt: "" })).toBe(true);
-    expect(weekIsCurrent({ Week: 0, Total: 0, WeekKey: "0000-00-00", ReadAt: "" })).toBe(false);
+    expect(weekIsCurrent({ Week: 0, Total: 0, WeekKey: todayKey, ReadAt: "", Confirmed: false })).toBe(true);
+    expect(weekIsCurrent({ Week: 0, Total: 0, WeekKey: "0000-00-00", ReadAt: "", Confirmed: false })).toBe(false);
   });
 });
 
 describe("setFromRead", () => {
-  it("clamps negatives and stamps current week + ISO ReadAt", () => {
+  it("clamps negatives and stamps current week + ISO ReadAt + confirmed", () => {
     const now = new Date(2026, 10, 13, 12, 0, 0);
     const s = setFromRead(-1, -2, now);
     expect(s).toEqual({
@@ -47,10 +48,13 @@ describe("setFromRead", () => {
       Total: 0,
       WeekKey: "2026-11-09",
       ReadAt: now.toISOString(),
+      Confirmed: true,
+      LastRunDay: "", // TS 层镜像占位；同日/隔日合并由后端决定
     });
     const s2 = setFromRead(2, 5, now);
     expect(s2.Week).toBe(2);
     expect(s2.Total).toBe(5);
+    expect(s2.Confirmed).toBe(true);
   });
 });
 
@@ -63,13 +67,15 @@ describe("incrementAfterSuccess", () => {
       Total: 1,
       WeekKey: "2026-11-09",
       ReadAt: now.toISOString(),
+      Confirmed: false, // +1 是本地估算（待审核）
+      LastRunDay: "2026-11-13",
     });
   });
 
-  it("increments within the same week", () => {
+  it("increments within the same week and clears confirmed", () => {
     const now = new Date(2026, 10, 13, 9, 0, 0);
     const before: ExerciseStatusMap = {
-      S1: { Week: 2, Total: 10, WeekKey: "2026-11-09", ReadAt: "old" },
+      S1: { Week: 2, Total: 10, WeekKey: "2026-11-09", ReadAt: "old", Confirmed: true },
     };
     const after = incrementAfterSuccess(before, "S1", now);
     expect(after.S1).toEqual({
@@ -77,13 +83,15 @@ describe("incrementAfterSuccess", () => {
       Total: 11,
       WeekKey: "2026-11-09",
       ReadAt: now.toISOString(),
+      Confirmed: false,
+      LastRunDay: "2026-11-13",
     });
   });
 
   it("resets Week to 0 (then +1) and keeps Total across a week boundary", () => {
     const now = new Date(2026, 10, 13, 9, 0, 0);
     const before: ExerciseStatusMap = {
-      S1: { Week: 4, Total: 10, WeekKey: "2026-11-02", ReadAt: "old" },
+      S1: { Week: 4, Total: 10, WeekKey: "2026-11-02", ReadAt: "old", Confirmed: true },
     };
     const after = incrementAfterSuccess(before, "S1", now);
     expect(after.S1).toEqual({
@@ -91,13 +99,15 @@ describe("incrementAfterSuccess", () => {
       Total: 11,
       WeekKey: "2026-11-09",
       ReadAt: now.toISOString(),
+      Confirmed: false,
+      LastRunDay: "2026-11-13",
     });
   });
 
   it("does not mutate the input map or status object", () => {
     const now = new Date(2026, 10, 13, 9, 0, 0);
     const before: ExerciseStatusMap = {
-      S1: { Week: 2, Total: 10, WeekKey: "2026-11-09", ReadAt: "old" },
+      S1: { Week: 2, Total: 10, WeekKey: "2026-11-09", ReadAt: "old", Confirmed: true },
     };
     const snap = JSON.parse(JSON.stringify(before));
     const after = incrementAfterSuccess(before, "S1", now);
@@ -107,10 +117,56 @@ describe("incrementAfterSuccess", () => {
   });
 });
 
+describe("isConfirmedAtCap", () => {
+  const now = new Date(2026, 10, 13, 9, 0, 0); // 周五，本周一 2026-11-09
+
+  it("requires Confirmed=true even when the numbers reach the cap", () => {
+    expect(
+      isConfirmedAtCap({ Week: 5, Total: 40, WeekKey: "2026-11-09", ReadAt: "", Confirmed: false }, 5, 32, now),
+    ).toBe(false);
+    expect(
+      isConfirmedAtCap({ Week: 5, Total: 40, WeekKey: "2026-11-09", ReadAt: "", Confirmed: true }, 5, 32, now),
+    ).toBe(true);
+  });
+
+  it("week cap only counts within the current week", () => {
+    expect(
+      isConfirmedAtCap({ Week: 5, Total: 1, WeekKey: "2026-11-09", ReadAt: "", Confirmed: true }, 5, 32, now),
+    ).toBe(true);
+    expect(
+      isConfirmedAtCap({ Week: 5, Total: 1, WeekKey: "2026-11-02", ReadAt: "", Confirmed: true }, 5, 32, now),
+    ).toBe(false);
+  });
+
+  it("total cap has no week restriction", () => {
+    expect(
+      isConfirmedAtCap({ Week: 0, Total: 32, WeekKey: "2000-01-03", ReadAt: "", Confirmed: true }, 5, 32, now),
+    ).toBe(true);
+    expect(
+      isConfirmedAtCap({ Week: 0, Total: 31, WeekKey: "2026-11-09", ReadAt: "", Confirmed: true }, 5, 32, now),
+    ).toBe(false);
+  });
+});
+
 describe("parseStatusMap", () => {
   it("parses a map, leniently defaulting missing fields", () => {
     const m = parseStatusMap('{"S1":{"Week":1,"Total":3}}');
-    expect(m.S1).toEqual({ Week: 1, Total: 3, WeekKey: "", ReadAt: "" });
+    expect(m.S1).toEqual({
+      Week: 1,
+      Total: 3,
+      WeekKey: "",
+      ReadAt: "",
+      Confirmed: false,
+      LastRunDay: "",
+    });
+  });
+
+  it("keeps Confirmed/LastRunDay when present", () => {
+    const m = parseStatusMap(
+      '{"S1":{"Week":1,"Total":33,"Confirmed":true,"LastRunDay":"2026-11-14"}}',
+    );
+    expect(m.S1.Confirmed).toBe(true);
+    expect(m.S1.LastRunDay).toBe("2026-11-14");
   });
 
   it("throws on malformed JSON or a non-object top level", () => {
@@ -123,10 +179,12 @@ describe("parseStatusMap", () => {
 
 describe("serializeStatusMap", () => {
   it("emits 2-space JSON and roundtrips", () => {
-    const m: ExerciseStatusMap = { S1: { Week: 1, Total: 3, WeekKey: "k", ReadAt: "r" } };
+    const m: ExerciseStatusMap = {
+      S1: { Week: 1, Total: 3, WeekKey: "k", ReadAt: "r", Confirmed: false, LastRunDay: "2026-11-13" },
+    };
     const s = serializeStatusMap(m);
     expect(s).toBe(
-      "{\n  \"S1\": {\n    \"Week\": 1,\n    \"Total\": 3,\n    \"WeekKey\": \"k\",\n    \"ReadAt\": \"r\"\n  }\n}",
+      "{\n  \"S1\": {\n    \"Week\": 1,\n    \"Total\": 3,\n    \"WeekKey\": \"k\",\n    \"ReadAt\": \"r\",\n    \"Confirmed\": false,\n    \"LastRunDay\": \"2026-11-13\"\n  }\n}",
     );
     expect(s.charCodeAt(0)).not.toBe(0xfeff); // 无 BOM
     expect(parseStatusMap(s)).toEqual(m);
