@@ -127,10 +127,14 @@ def install_chores():
         working_dir / "README.md",
         install_path,
     )
-    shutil.copy2(
-        working_dir / "LICENSE",
-        install_path,
-    )
+    license_file = working_dir / "LICENSE"
+    if license_file.exists():
+        shutil.copy2(
+            license_file,
+            install_path,
+        )
+    else:
+        print("No LICENSE file found; skipping license copy.")
 
 
 def install_agent():
