@@ -43,6 +43,9 @@ fn default_skip_on_confirmed_counts() -> bool {
     true
 }
 
+fn default_execution_mode() -> String { "serial".into() }
+fn default_parallel_vm_count() -> u32 { 2 }
+
 /// 与旧 `gui/gui-settings.json` 完全同构：PascalCase 字段名，不能改动，
 /// 否则用户已有配置会被当成默认值。
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -71,6 +74,12 @@ pub struct AppSettings {
     /// +1 估算（Confirmed=false）永远不触发预跳过。
     #[serde(rename = "SkipOnConfirmedCounts", default = "default_skip_on_confirmed_counts")]
     pub skip_on_confirmed_counts: bool,
+    /// "serial" 或 "parallel"；缺省串行（保持旧配置行为）。
+    #[serde(rename = "ExecutionMode", default = "default_execution_mode")]
+    pub execution_mode: String,
+    /// 并行时同时开启的虚拟机台数；缺省 2，保存时夹取 1..=8。
+    #[serde(rename = "ParallelVmCount", default = "default_parallel_vm_count")]
+    pub parallel_vm_count: u32,
     #[serde(rename = "AutoScroll", default = "default_auto_scroll")]
     pub auto_scroll: bool,
 }
@@ -89,6 +98,8 @@ impl Default for AppSettings {
             week_limit: default_week_limit(),
             total_limit: default_total_limit(),
             skip_on_confirmed_counts: default_skip_on_confirmed_counts(),
+            execution_mode: default_execution_mode(),
+            parallel_vm_count: default_parallel_vm_count(),
             auto_scroll: default_auto_scroll(),
         }
     }
@@ -113,6 +124,15 @@ impl AppSettings {
             self.total_limit = default_total_limit();
         }
         self.selected_students.retain(|id| !id.trim().is_empty());
+        if self.execution_mode != "parallel" {
+            self.execution_mode = default_execution_mode();
+        }
+        if self.parallel_vm_count == 0 {
+            self.parallel_vm_count = default_parallel_vm_count();
+        }
+        if self.parallel_vm_count > 8 {
+            self.parallel_vm_count = 8;
+        }
         self
     }
 }
@@ -158,6 +178,8 @@ mod tests {
         assert!(settings.auto_scroll);
         assert_eq!(settings.environment.get("PYTHONUTF8").map(String::as_str), Some("1"));
         assert_eq!(settings.template_vm_name, "模板");
+        assert_eq!(settings.execution_mode, "serial");
+        assert_eq!(settings.parallel_vm_count, 2);
     }
 
     #[test]
@@ -192,6 +214,8 @@ mod tests {
             "\"WeekLimit\"",
             "\"TotalLimit\"",
             "\"SkipOnConfirmedCounts\"",
+            "\"ExecutionMode\"",
+            "\"ParallelVmCount\"",
             "\"AutoScroll\"",
         ] {
             assert!(json.contains(key), "missing {key}");
@@ -212,6 +236,36 @@ mod tests {
         assert_eq!(settings.week_limit, 4);
         assert_eq!(settings.total_limit, 32); // 缺字段回退默认
         assert!(settings.skip_on_confirmed_counts); // 缺字段回退默认（开）
+        assert_eq!(settings.execution_mode, "serial"); // 缺字段回退默认
+        assert_eq!(settings.parallel_vm_count, 2); // 缺字段回退默认
         assert_eq!(settings.selected_students, vec!["2025302319".to_string()]);
+    }
+
+    #[test]
+    fn normalize_clamps_execution_fields() {
+        let settings = AppSettings {
+            execution_mode: "weird".into(),
+            parallel_vm_count: 0,
+            ..Default::default()
+        }
+        .normalize();
+        assert_eq!(settings.execution_mode, "serial");
+        assert_eq!(settings.parallel_vm_count, 2);
+
+        let settings = AppSettings {
+            execution_mode: "parallel".into(),
+            parallel_vm_count: 99,
+            ..Default::default()
+        }
+        .normalize();
+        assert_eq!(settings.execution_mode, "parallel");
+        assert_eq!(settings.parallel_vm_count, 8);
+
+        let settings = AppSettings {
+            parallel_vm_count: 5,
+            ..Default::default()
+        }
+        .normalize();
+        assert_eq!(settings.parallel_vm_count, 5);
     }
 }

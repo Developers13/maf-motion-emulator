@@ -18,6 +18,8 @@ export interface AppSettings {
   WeekLimit: number;
   TotalLimit: number;
   SkipOnConfirmedCounts: boolean;
+  ExecutionMode: "serial" | "parallel";
+  ParallelVmCount: number;
   AutoScroll: boolean;
 }
 
@@ -36,6 +38,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   WeekLimit: 5,
   TotalLimit: 32,
   SkipOnConfirmedCounts: true,
+  ExecutionMode: "serial",
+  ParallelVmCount: 2,
   AutoScroll: true,
 };
 
@@ -60,6 +64,18 @@ function positiveLimit(value: unknown, fallback: number): number {
   )
     ? value
     : fallback;
+}
+
+// 并行台数：非数字/NaN/Infinity/<=0 → 2；小数截断；上限 8。
+function parallelVmCount(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 2;
+  }
+  const n = Math.trunc(value);
+  if (n < 1) {
+    return 2;
+  }
+  return Math.min(8, n);
 }
 
 export function normalizeSettings(raw: unknown): AppSettings {
@@ -88,6 +104,8 @@ export function normalizeSettings(raw: unknown): AppSettings {
 
   const scrollValue = r["AutoScroll"];
   const skipValue = r["SkipOnConfirmedCounts"];
+  const modeValue = r.ExecutionMode;
+  const vmCountValue = r.ParallelVmCount;
   return {
     PythonLauncher: isNonEmptyString(r.PythonLauncher)
       ? r.PythonLauncher
@@ -113,6 +131,8 @@ export function normalizeSettings(raw: unknown): AppSettings {
     TotalLimit: positiveLimit(r.TotalLimit, DEFAULT_SETTINGS.TotalLimit),
     SkipOnConfirmedCounts:
       typeof skipValue === "boolean" ? skipValue : true,
+    ExecutionMode: modeValue === "parallel" ? "parallel" : "serial",
+    ParallelVmCount: parallelVmCount(vmCountValue),
     AutoScroll:
       typeof scrollValue === "boolean" ? scrollValue : true,
   };
@@ -133,6 +153,8 @@ export function serializeSettings(s: AppSettings): string {
     WeekLimit: s.WeekLimit,
     TotalLimit: s.TotalLimit,
     SkipOnConfirmedCounts: s.SkipOnConfirmedCounts,
+    ExecutionMode: s.ExecutionMode,
+    ParallelVmCount: s.ParallelVmCount,
   };
   const lastKey = "AutoScroll";
   ordered[lastKey] = s[lastKey];

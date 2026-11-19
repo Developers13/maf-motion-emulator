@@ -3,8 +3,9 @@ use crate::proc::{self, ManagedProcess, SpawnSpec, StopHandle, WaitError};
 use crate::settings::AppSettings;
 use crate::status::{self, StatusMap};
 use crate::paths;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::AppHandle;
@@ -13,7 +14,8 @@ pub struct AppState {
     pub root: PathBuf,
     pub settings: Mutex<AppSettings>,
     pub statuses: Mutex<StatusMap>,
-    pub current: Mutex<Option<StopHandle>>,
+    pub current: Mutex<HashMap<u64, StopHandle>>,
+    next_handle_id: AtomicU64,
     pub stop: AtomicBool,
     pub busy: AtomicBool,
 }
@@ -24,7 +26,8 @@ impl AppState {
             root,
             settings: Mutex::new(settings),
             statuses: Mutex::new(statuses),
-            current: Mutex::new(None),
+            current: Mutex::new(HashMap::new()),
+            next_handle_id: AtomicU64::new(0),
             stop: AtomicBool::new(false),
             busy: AtomicBool::new(false),
         }
@@ -60,30 +63,39 @@ enum Prep {
 const MINUTE: u64 = 60;
 
 /// 启动一个脚本并等待；输出逐行转发到界面，同时收集给解析用。
+/// 并行模式下 `log_prefix` 为学号，仅给事件加 `[学号] ` 前缀，
+/// 收集到 `lines` 的仍是原始行（供 parse_counts / parse_skip 解析）。
 fn run_script(
     state: &Arc<AppState>,
     app: &AppHandle,
     spec: SpawnSpec,
     timeout: Duration,
+    log_prefix: Option<&str>,
 ) -> Result<ScriptOutcome, String> {
     let lines: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let label = spec.label.clone();
     let app_for_line = app.clone();
+    let prefix = log_prefix.map(|value| value.to_string());
     let sink = {
         let lines = Arc::clone(&lines);
         Arc::new(move |is_error: bool, line: String| {
-            events::log(&app_for_line, &label, &line, is_error);
+            let shown = match &prefix {
+                Some(p) => format!("[{p}] {line}"),
+                None => line.clone(),
+            };
+            events::log(&app_for_line, &label, &shown, is_error);
             if let Ok(mut guard) = lines.lock() {
                 guard.push(line);
             }
         })
     };
 
+    let handle_id = state.next_handle_id.fetch_add(1, Ordering::SeqCst);
     let process: ManagedProcess = proc::spawn(spec, sink).map_err(|e| format!("无法启动脚本: {e}"))?;
-    *state.current.lock().unwrap() = Some(process.stop_handle());
+    state.current.lock().unwrap().insert(handle_id, process.stop_handle());
 
     let wait = process.wait(timeout);
-    *state.current.lock().unwrap() = None;
+    state.current.lock().unwrap().remove(&handle_id);
 
     let (code, timed_out) = match wait {
         Ok(code) => (code, false),
@@ -145,6 +157,7 @@ fn run_e2e(
     app: &AppHandle,
     sid: &str,
     skip_if_done: bool,
+    log_prefix: Option<&str>,
 ) -> Result<(ScriptOutcome, bool), String> {
     let (settings, root) = {
         let settings = state.settings.lock().unwrap().clone();
@@ -161,6 +174,7 @@ fn run_e2e(
     let has_mumu = has_env("MAF_MUMU_MANAGER");
     let has_week = has_env("MAF_WEEK_LIMIT");
     let has_total = has_env("MAF_TOTAL_LIMIT");
+    let has_debug = has_env("MAF_DEBUG_DIR");
     if !has_mumu {
         env.push(("MAF_MUMU_MANAGER".into(), settings.mumu_manager_path.clone()));
     }
@@ -169,6 +183,12 @@ fn run_e2e(
     }
     if !has_total {
         env.push(("MAF_TOTAL_LIMIT".into(), settings.total_limit.to_string()));
+    }
+    // 并行模式下给每个学号独立 MaaFW 调试目录；用户显式设置的 MAF_DEBUG_DIR 优先。
+    if log_prefix.is_some() && !has_debug {
+        let dir = root.join("debug").join("parallel").join(sid);
+        let _ = std::fs::create_dir_all(&dir);
+        env.push(("MAF_DEBUG_DIR".into(), dir.to_string_lossy().to_string()));
     }
 
     let mut args = vec!["tools/e2e.py".to_string(), sid.to_string()];
@@ -185,10 +205,15 @@ fn run_e2e(
     let state_for_line = Arc::clone(state);
     let skipped_for_line = Arc::clone(&skipped);
     let sid_owned = sid.to_string();
+    let prefix = log_prefix.map(|value| value.to_string());
     let sink = {
         let lines = Arc::clone(&lines);
         Arc::new(move |is_error: bool, line: String| {
-            events::log(&app_for_line, "python", &line, is_error);
+            let shown = match &prefix {
+                Some(p) => format!("[{p}] {line}"),
+                None => line.clone(),
+            };
+            events::log(&app_for_line, "python", &shown, is_error);
             if let Ok(mut guard) = lines.lock() {
                 guard.push(line.clone());
             }
@@ -197,10 +222,11 @@ fn run_e2e(
     };
 
     let process = proc::spawn(spec, sink).map_err(|e| format!("无法启动 e2e: {e}"))?;
-    *state.current.lock().unwrap() = Some(process.stop_handle());
+    let handle_id = state.next_handle_id.fetch_add(1, Ordering::SeqCst);
+    state.current.lock().unwrap().insert(handle_id, process.stop_handle());
 
     let wait = process.wait(Duration::from_secs(6 * 3600));
-    *state.current.lock().unwrap() = None;
+    state.current.lock().unwrap().remove(&handle_id);
 
     let (code, timed_out) = match wait {
         Ok(code) => (code, false),
@@ -305,9 +331,22 @@ mod tests {
         );
         assert_eq!(parse_skip("nothing here"), None);
     }
+
+    #[test]
+    fn worker_count_is_clamped_and_capped() {
+        assert_eq!(worker_count(2, 10), 2);
+        assert_eq!(worker_count(0, 10), 1);
+        assert_eq!(worker_count(99, 5), 5);
+        assert_eq!(worker_count(3, 0), 1);
+    }
 }
 
-fn prepare_student(state: &Arc<AppState>, app: &AppHandle, sid: &str) -> Prep {
+fn prepare_student(
+    state: &Arc<AppState>,
+    app: &AppHandle,
+    sid: &str,
+    log_prefix: Option<&str>,
+) -> Prep {
     let (settings, root) = {
         let settings = state.settings.lock().unwrap().clone();
         (settings, state.root.clone())
@@ -325,7 +364,13 @@ fn prepare_student(state: &Arc<AppState>, app: &AppHandle, sid: &str) -> Prep {
                 ("ManagerPath", settings.mumu_manager_path.clone()),
             ],
         );
-        let outcome = match run_script(state, app, spec, Duration::from_secs(6 * MINUTE)) {
+        let outcome = match run_script(
+            state,
+            app,
+            spec,
+            Duration::from_secs(6 * MINUTE),
+            log_prefix,
+        ) {
             Ok(outcome) => outcome,
             Err(e) => return Prep::Failed(e),
         };
@@ -378,6 +423,7 @@ fn prepare_student(state: &Arc<AppState>, app: &AppHandle, sid: &str) -> Prep {
         app,
         adb_prep_spec(&settings, &root, &port),
         Duration::from_secs(3 * MINUTE),
+        log_prefix,
     ) {
         Ok(outcome) => outcome,
         Err(e) => return Prep::Failed(e),
@@ -429,7 +475,13 @@ fn prepare_student(state: &Arc<AppState>, app: &AppHandle, sid: &str) -> Prep {
             ],
             root.clone(),
         );
-        let recovery = match run_script(state, app, spec, Duration::from_secs(15 * MINUTE)) {
+        let recovery = match run_script(
+            state,
+            app,
+            spec,
+            Duration::from_secs(15 * MINUTE),
+            log_prefix,
+        ) {
             Ok(outcome) => outcome,
             Err(e) => return Prep::Failed(e),
         };
@@ -455,6 +507,7 @@ fn prepare_student(state: &Arc<AppState>, app: &AppHandle, sid: &str) -> Prep {
             app,
             adb_prep_spec(&settings, &root, &port),
             Duration::from_secs(3 * MINUTE),
+            log_prefix,
         ) {
             Ok(outcome) => outcome,
             Err(e) => return Prep::Failed(e),
@@ -496,7 +549,7 @@ fn shutdown_instances(state: &Arc<AppState>, app: &AppHandle, keep: Option<&str>
             ("ManagerPath", settings.mumu_manager_path.clone()),
         ],
     );
-    match run_script(state, app, spec, timeout) {
+    match run_script(state, app, spec, timeout, None) {
         Ok(outcome) if outcome.code == 0 => {}
         Ok(outcome) => events::log(
             app,
@@ -508,7 +561,12 @@ fn shutdown_instances(state: &Arc<AppState>, app: &AppHandle, keep: Option<&str>
     }
 }
 
-fn shutdown_student(state: &Arc<AppState>, app: &AppHandle, sid: &str) {
+fn shutdown_student(
+    state: &Arc<AppState>,
+    app: &AppHandle,
+    sid: &str,
+    log_prefix: Option<&str>,
+) {
     let (settings, root) = {
         let settings = state.settings.lock().unwrap().clone();
         (settings, state.root.clone())
@@ -522,7 +580,7 @@ fn shutdown_student(state: &Arc<AppState>, app: &AppHandle, sid: &str) {
             ("ManagerPath", settings.mumu_manager_path.clone()),
         ],
     );
-    match run_script(state, app, spec, Duration::from_secs(3 * MINUTE)) {
+    match run_script(state, app, spec, Duration::from_secs(3 * MINUTE), log_prefix) {
         Ok(outcome) if outcome.code == 0 => {}
         // instance_not_found 是正常情况：该学号本来就没在跑。
         Ok(outcome) if outcome.has("instance_not_found") => {}
@@ -591,8 +649,24 @@ pub fn start(state: Arc<AppState>, app: AppHandle, students: Vec<String>) {
     }
     state.stop.store(false, Ordering::SeqCst);
 
+    let (mode, limit) = {
+        let settings = state.settings.lock().unwrap();
+        (settings.execution_mode.clone(), settings.parallel_vm_count as usize)
+    };
+
     std::thread::spawn(move || {
-        if students.len() > 1 {
+        // adb server 必须在任何 Job 之外预启动：否则某个 e2e 结束关闭 Job 时
+        // 会把共享 server 一起带走，打断其它并行任务。
+        let mumu = state.settings.lock().unwrap().mumu_manager_path.clone();
+        if proc::ensure_adb_server(&mumu) {
+            events::log(&app, "gui", "=== adb server ready (outside run Job) ===", false);
+        } else {
+            events::log(&app, "gui", "[adb] WARN adb start-server failed; MaaFW will retry", false);
+        }
+
+        if students.len() > 1 && mode == "parallel" && limit > 1 {
+            run_parallel(&state, &app, &students, limit);
+        } else if students.len() > 1 {
             run_batch(&state, &app, &students);
         } else if let Some(sid) = students.first() {
             run_single(&state, &app, sid);
@@ -613,7 +687,7 @@ fn run_single(state: &Arc<AppState>, app: &AppHandle, sid: &str) {
         "info",
     );
 
-    match prepare_student(state, app, sid) {
+    match prepare_student(state, app, sid, None) {
         Prep::Stopped => {
             events::log(app, "gui", "=== Run stopped by user during prep ===", false);
             events::run_state(app, "stopped", Some(sid), None, None, "已停止", "neutral");
@@ -641,7 +715,7 @@ fn run_single(state: &Arc<AppState>, app: &AppHandle, sid: &str) {
     }
 
     events::run_state(app, "running", Some(sid), None, None, "运行中…", "info");
-    let (outcome, _) = match run_e2e(state, app, sid, false) {
+    let (outcome, _) = match run_e2e(state, app, sid, false, None) {
         Ok(result) => result,
         Err(e) => {
             events::log(app, "gui", &format!("=== Run failed: {e} ==="), true);
@@ -733,7 +807,7 @@ fn run_batch(state: &Arc<AppState>, app: &AppHandle, students: &[String]) {
             break;
         }
 
-        match prepare_student(state, app, sid) {
+        match prepare_student(state, app, sid, None) {
             Prep::Stopped => break,
             Prep::Failed(message) => {
                 failed.push(sid.clone());
@@ -744,7 +818,7 @@ fn run_batch(state: &Arc<AppState>, app: &AppHandle, students: &[String]) {
                     &format!("批量运行 ({progress}/{total}) 失败"),
                     &format!("{sid} 准备失败：{message}"),
                 );
-                shutdown_student(state, app, sid);
+                shutdown_student(state, app, sid, None);
                 continue;
             }
             Prep::Ready => {}
@@ -765,12 +839,12 @@ fn run_batch(state: &Arc<AppState>, app: &AppHandle, students: &[String]) {
             "info",
         );
 
-        let (outcome, was_skipped) = match run_e2e(state, app, sid, true) {
+        let (outcome, was_skipped) = match run_e2e(state, app, sid, true, None) {
             Ok(result) => result,
             Err(e) => {
                 failed.push(sid.clone());
                 events::log(app, "gui", &format!("[batch] {sid} -> FAILED: {e}"), true);
-                shutdown_student(state, app, sid);
+                shutdown_student(state, app, sid, None);
                 continue;
             }
         };
@@ -793,7 +867,7 @@ fn run_batch(state: &Arc<AppState>, app: &AppHandle, students: &[String]) {
                 &format!("批量运行 ({progress}/{total}) 跳过"),
                 &format!("{sid} 本周或总次数已达上限，已跳过。"),
             );
-            shutdown_student(state, app, sid);
+            shutdown_student(state, app, sid, None);
             continue;
         }
 
@@ -823,7 +897,7 @@ fn run_batch(state: &Arc<AppState>, app: &AppHandle, students: &[String]) {
             );
         }
 
-        shutdown_student(state, app, sid);
+        shutdown_student(state, app, sid, None);
     }
 
     events::log(app, "gui", "=== Closing all emulator instances ===", false);
@@ -879,31 +953,316 @@ fn run_batch(state: &Arc<AppState>, app: &AppHandle, students: &[String]) {
     );
 }
 
+#[derive(Default)]
+struct BatchOutcome {
+    succeeded: Vec<String>,
+    failed: Vec<String>,
+    skipped: Vec<String>,
+}
+
+/// 并行 worker 数：夹取 1..=8 并受学号总数限制。
+fn worker_count(limit: usize, total: usize) -> usize {
+    limit.clamp(1, 8).min(total.max(1))
+}
+
+fn emit_parallel_progress(app: &AppHandle, active: usize, completed: usize, total: usize) {
+    events::run_state(
+        app,
+        "batch",
+        None,
+        Some(completed),
+        Some(total),
+        &format!("并行运行 {active} 台 · 完成 {completed}/{total}"),
+        "info",
+    );
+}
+
+fn run_parallel(state: &Arc<AppState>, app: &AppHandle, students: &[String], limit: usize) {
+    let total = students.len();
+    let workers = worker_count(limit, total);
+
+    events::log(
+        app,
+        "gui",
+        &format!("=== Parallel batch: {total} student(s), up to {workers} VM(s) at a time ==="),
+        false,
+    );
+    events::run_state(
+        app,
+        "batch",
+        None,
+        Some(0),
+        Some(total),
+        &format!("并行运行（最多 {workers} 台）…"),
+        "info",
+    );
+
+    // 批次开始先关闭所有已有实例；共享 adb server 已由 start() 预热。
+    // 即使此时用户已经点了停止，也继续走完 worker 循环（worker 会立即
+    // 因 stop 退出）和收尾 shutdown-all，保证「停止 = 全部关闭」。
+    shutdown_instances(state, app, None, Duration::from_secs(5 * MINUTE));
+
+    let queue = Arc::new(Mutex::new(VecDeque::from(students.to_vec())));
+    let outcome = Arc::new(Mutex::new(BatchOutcome::default()));
+    let completed = Arc::new(AtomicUsize::new(0));
+    let active = Arc::new(Mutex::new(HashSet::<String>::new()));
+
+    let mut joins: Vec<std::thread::JoinHandle<()>> = Vec::new();
+    for _ in 0..workers {
+        let state = Arc::clone(state);
+        let app = app.clone();
+        let queue = Arc::clone(&queue);
+        let outcome = Arc::clone(&outcome);
+        let completed = Arc::clone(&completed);
+        let active = Arc::clone(&active);
+        let total = total;
+        joins.push(std::thread::spawn(move || {
+            loop {
+                if state.stop.load(Ordering::SeqCst) {
+                    break;
+                }
+                let sid = {
+                    let mut q = queue.lock().unwrap();
+                    match q.pop_front() {
+                        Some(s) => s,
+                        None => break,
+                    }
+                };
+
+                // 预跳过（与串行同规则）；并行下不发 per-student toast（避免刷屏）。
+                if let Some((reason, entry, week_limit, total_limit)) = pre_skip_entry(&state, &sid) {
+                    {
+                        let mut o = outcome.lock().unwrap();
+                        o.skipped.push(sid.clone());
+                    }
+                    events::log(
+                        &app,
+                        "gui",
+                        &format!(
+                            "[batch] {sid} -> SKIP ({reason}: week={}/{} total={}/{})",
+                            entry.week, week_limit, entry.total, total_limit
+                        ),
+                        false,
+                    );
+                    let done = completed.fetch_add(1, Ordering::SeqCst) + 1;
+                    emit_parallel_progress(&app, active.lock().unwrap().len(), done, total);
+                    continue;
+                }
+
+                {
+                    let mut a = active.lock().unwrap();
+                    a.insert(sid.clone());
+                }
+                let done = completed.load(Ordering::SeqCst);
+                let active_len = active.lock().unwrap().len();
+                emit_parallel_progress(&app, active_len, done, total);
+
+                // 两个明确状态：stop_worker 中断本 worker；prepared 决定是否进入 e2e。
+                let mut stop_worker = false;
+                let mut prepared = false;
+
+                match prepare_student(&state, &app, &sid, Some(&sid)) {
+                    Prep::Stopped => {
+                        stop_worker = true;
+                    }
+                    Prep::Failed(message) => {
+                        {
+                            let mut o = outcome.lock().unwrap();
+                            o.failed.push(sid.clone());
+                        }
+                        events::log(
+                            &app,
+                            "gui",
+                            &format!("[batch] {sid} prep -> FAILED: {message}"),
+                            true,
+                        );
+                        events::toast(
+                            &app,
+                            "fail",
+                            &format!("并行运行失败 · {sid}"),
+                            &format!("准备失败：{message}"),
+                        );
+                        // prepared 保持 false：准备失败绝不进入 e2e（与串行一致）。
+                    }
+                    Prep::Ready => {
+                        if state.stop.load(Ordering::SeqCst) {
+                            stop_worker = true;
+                        } else {
+                            prepared = true;
+                        }
+                    }
+                }
+
+                if stop_worker {
+                    {
+                        let mut a = active.lock().unwrap();
+                        a.remove(&sid);
+                    }
+                    break;
+                }
+
+                if prepared {
+                    events::log(&app, "gui", &format!("=== Start run: {sid} ==="), false);
+                    match run_e2e(&state, &app, &sid, true, Some(&sid)) {
+                        Ok((outcome_res, was_skipped)) => {
+                            if outcome_res.stopped || outcome_res.timed_out {
+                                {
+                                    let mut a = active.lock().unwrap();
+                                    a.remove(&sid);
+                                }
+                                break;
+                            }
+                            if outcome_res.code == 3 || was_skipped {
+                                {
+                                    let mut o = outcome.lock().unwrap();
+                                    o.skipped.push(sid.clone());
+                                }
+                                events::log(
+                                    &app,
+                                    "gui",
+                                    &format!("[batch] {sid} -> SKIP (weekly/total cap reached)"),
+                                    false,
+                                );
+                            } else if outcome_res.code == 0 {
+                                {
+                                    let mut o = outcome.lock().unwrap();
+                                    o.succeeded.push(sid.clone());
+                                }
+                                increment_and_emit(&state, &app, &sid);
+                                events::log(&app, "gui", &format!("[batch] {sid} -> OK"), false);
+                                events::toast(
+                                    &app,
+                                    "ok",
+                                    &format!("并行运行完成 · {sid}"),
+                                    "全部流程已正常结束。",
+                                );
+                            } else {
+                                {
+                                    let mut o = outcome.lock().unwrap();
+                                    o.failed.push(sid.clone());
+                                }
+                                events::log(
+                                    &app,
+                                    "gui",
+                                    &format!("[batch] {sid} -> FAILED (exit code {})", outcome_res.code),
+                                    true,
+                                );
+                                events::toast(
+                                    &app,
+                                    "fail",
+                                    &format!("并行运行失败 · {sid}"),
+                                    &format!("退出码 {}，请查看日志排查。", outcome_res.code),
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            {
+                                let mut o = outcome.lock().unwrap();
+                                o.failed.push(sid.clone());
+                            }
+                            events::log(&app, "gui", &format!("[batch] {sid} -> FAILED: {e}"), true);
+                            events::toast(
+                                &app,
+                                "fail",
+                                &format!("并行运行失败 · {sid}"),
+                                &format!("运行失败：{e}"),
+                            );
+                        }
+                    }
+                }
+
+                // 正常路径：无论成功/失败/跳过都关闭本学号的 VM。
+                shutdown_student(&state, &app, &sid, Some(&sid));
+                {
+                    let mut a = active.lock().unwrap();
+                    a.remove(&sid);
+                }
+                let done = completed.fetch_add(1, Ordering::SeqCst) + 1;
+                emit_parallel_progress(&app, active.lock().unwrap().len(), done, total);
+            }
+        }));
+    }
+    for h in joins {
+        let _ = h.join();
+    }
+
+    // 收尾：无条件关闭所有实例（即使 stop 为真也要跑；run_script 不检查 stop）。
+    events::log(app, "gui", "=== Closing all emulator instances ===", false);
+    shutdown_instances(state, app, None, Duration::from_secs(5 * MINUTE));
+
+    let outcome = outcome.lock().unwrap();
+    if state.stop.load(Ordering::SeqCst) {
+        events::log(app, "gui", "=== Parallel batch stopped by user ===", false);
+        events::run_state(app, "stopped", None, None, Some(total), "已停止", "neutral");
+        events::toast(
+            app,
+            "neutral",
+            "并行运行已停止",
+            &format!("已完成 {} 个，失败 {} 个。", outcome.succeeded.len(), outcome.failed.len()),
+        );
+        return;
+    }
+
+    let summary = if outcome.succeeded.is_empty() && outcome.failed.is_empty() && !outcome.skipped.is_empty() {
+        format!(
+            "并行运行完成：{} 个学号均已达上限（本周或总次数），已全部跳过。",
+            outcome.skipped.len()
+        )
+    } else {
+        let mut text = format!("并行运行完成：成功 {} 个", outcome.succeeded.len());
+        if !outcome.skipped.is_empty() {
+            text.push_str(&format!("，跳过 {} 个（已达上限）", outcome.skipped.len()));
+        }
+        if outcome.failed.is_empty() {
+            text.push_str("，全部通过");
+        } else {
+            text.push_str(&format!("，失败 {} 个（{}）", outcome.failed.len(), outcome.failed.join(", ")));
+        }
+        text.push('。');
+        text
+    };
+
+    let has_failure = !outcome.failed.is_empty();
+    events::log(app, "gui", &format!("=== {summary} ==="), has_failure);
+    events::run_state(
+        app,
+        if has_failure { "failed" } else { "done" },
+        None,
+        None,
+        Some(total),
+        if has_failure { "部分失败" } else { "完成" },
+        if has_failure { "error" } else { "ok" },
+    );
+    events::toast(
+        app,
+        if has_failure { "fail" } else { "ok" },
+        if has_failure { "并行运行完成（部分失败）" } else { "并行运行完成" },
+        &summary,
+    );
+}
+
 /// 停止：置标志 → Ctrl+C → 2s 宽限后 Job 强杀。空闲时只记日志。
 pub fn stop(state: &Arc<AppState>, app: &AppHandle) {
     let busy = state.busy.load(Ordering::SeqCst);
-    let handle = state.current.lock().unwrap().take();
-    if !busy && handle.is_none() {
+    let handles: Vec<StopHandle> = {
+        let mut map = state.current.lock().unwrap();
+        map.drain().map(|(_, handle)| handle).collect()
+    };
+    if !busy && handles.is_empty() {
         events::log(app, "gui", "=== Nothing is running ===", false);
         return;
     }
 
     state.stop.store(true, Ordering::SeqCst);
-
-    if let Some(handle) = handle {
-        let sent = handle.request_ctrl_c();
-        proc::terminate_after_grace(vec![handle], Duration::from_secs(2));
-        events::log(
-            app,
-            "gui",
-            &format!(
-                "=== Stop requested: Ctrl+C signalled {} process(es); terminating within 2s ===",
-                if sent { 1 } else { 0 }
-            ),
-            false,
-        );
-    } else {
-        events::log(app, "gui", "=== Stop requested (no live child) ===", false);
-    }
+    let signalled = handles.iter().filter(|handle| handle.request_ctrl_c()).count();
+    proc::terminate_after_grace(handles, Duration::from_secs(2));
+    events::log(
+        app,
+        "gui",
+        &format!(
+            "=== Stop requested: Ctrl+C signalled {signalled} process(es); terminating within 2s ==="
+        ),
+        false,
+    );
     events::run_state(app, "stopping", None, None, None, "停止中…", "neutral");
 }

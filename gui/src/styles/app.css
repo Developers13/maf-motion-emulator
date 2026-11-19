@@ -364,6 +364,68 @@ button {
   background: var(--hover);
 }
 
+.rail-runmode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 4px;
+}
+
+.rail-runmode .eyebrow {
+  font-size: 11px;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.seg {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: calc(var(--r-sm) - 2px);
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    opacity var(--dur) var(--ease);
+}
+
+.seg.is-active {
+  background: var(--ink);
+  color: #fff;
+}
+
+.seg:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.runmode-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 全局 .input 在本文件后部定义且优先级相同，
+   若用裸 .runmode-input 会被其 width/height/padding 覆盖；
+   故按作用域提升优先级，保证台数输入框为紧凑 58×28 尺寸。 */
+.rail-runmode .runmode-input {
+  width: 58px;
+  height: 28px;
+  padding: 0 6px;
+  text-align: center;
+}
+
 /* ---------- 工作区头部 ---------- */
 
 .work-head {
@@ -952,7 +1014,9 @@ button {
   .rail {
     border-right: 0;
     border-bottom: 1px solid var(--border);
-    max-height: 52vh;
+    /* 52vh 在 940x640 最小窗口下会被固定控件（含新增的执行模式行）挤到
+       学号列表高度为 0；72vh 保证至少能看到几行，超出部分由列表自身滚动。 */
+    max-height: 72vh;
   }
 
   .workspace {

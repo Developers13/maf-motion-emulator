@@ -35,6 +35,17 @@
         </section>
 
         <div class="rail-actions">
+          <div class="rail-runmode">
+            <span class="eyebrow">执行模式</span>
+            <div class="segmented" id="mode-switch" role="group" aria-label="执行模式">
+              <button type="button" class="seg is-active" data-mode="serial" aria-pressed="true">串行</button>
+              <button type="button" class="seg" data-mode="parallel" aria-pressed="false">并行</button>
+            </div>
+            <label class="runmode-count" id="parallel-count-wrap" hidden>
+              <span class="eyebrow">台数</span>
+              <input class="input runmode-input" id="parallel-count" type="number" min="1" max="8" step="1" value="2" inputmode="numeric" />
+            </label>
+          </div>
           <button type="button" class="btn btn-primary" id="btn-start">开始运行</button>
           <button type="button" class="btn btn-danger" id="btn-stop">停止</button>
           <div class="rail-secondary">

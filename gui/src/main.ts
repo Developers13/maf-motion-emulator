@@ -58,6 +58,14 @@ function notify(tone: Tone, title: string, body: string): void {
   }
 }
 
+function currentMode(): "serial" | "parallel" {
+  return state.settings?.ExecutionMode === "parallel" ? "parallel" : "serial";
+}
+
+function currentParallelCount(): number {
+  return state.settings?.ParallelVmCount ?? 2;
+}
+
 function renderStatus(): void {
   const pill = el<HTMLDivElement>("status-pill");
   const text = el<HTMLSpanElement>("status-text");
@@ -76,7 +84,9 @@ function renderStatus(): void {
       (state.run.index ?? 0) > 0;
     progress.hidden = !showProgress;
     if (showProgress) {
-      progressText.textContent = `${state.run.index}/${state.run.total} · ${state.run.student ?? ""}`;
+      progressText.textContent = state.run.student
+        ? `${state.run.index}/${state.run.total} · ${state.run.student}`
+        : `${state.run.index}/${state.run.total}`;
       const percent = Math.round(((state.run.index ?? 0) / (state.run.total ?? 1)) * 100);
       bar.style.width = `${percent}%`;
     }
@@ -92,6 +102,27 @@ function updateButtons(): void {
     start.textContent = isBusy() ? "运行中…" : "开始运行";
   }
   updateSelectionChrome();
+  syncRunMode();
+}
+
+function syncRunMode(): void {
+  const mode = currentMode();
+  const busy = isBusy();
+  document.querySelectorAll<HTMLButtonElement>("#mode-switch .seg").forEach((btn) => {
+    const active = btn.dataset.mode === mode;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.disabled = busy;
+  });
+  const wrap = el<HTMLLabelElement>("parallel-count-wrap");
+  if (wrap) {
+    wrap.hidden = mode !== "parallel";
+  }
+  const input = el<HTMLInputElement>("parallel-count");
+  if (input) {
+    input.value = String(currentParallelCount());
+    input.disabled = busy;
+  }
 }
 
 function renderAll(): void {
@@ -142,6 +173,17 @@ async function persistSelection(): Promise<void> {
   }
 }
 
+async function persistRunMode(): Promise<void> {
+  if (!state.settings) {
+    return;
+  }
+  try {
+    await api.saveSettings(state.settings);
+  } catch (e) {
+    logLine(`[settings] WARN 保存执行模式失败：${String(e)}`, true);
+  }
+}
+
 async function startRun(): Promise<void> {
   if (isBusy()) {
     return;
@@ -156,18 +198,33 @@ async function startRun(): Promise<void> {
     return !row || row.password.length === 0;
   });
 
+  const parallel =
+    ids.length > 1 &&
+    currentMode() === "parallel" &&
+    currentParallelCount() > 1;
+
   if (ids.length > 1) {
-    const lines = [
-      `将对选中的 ${ids.length} 个学号逐个运行：`,
-      "每个学号：关闭其他实例 → 自动准备（启动实例 + 环境检查）→ 跑完整流程 → 关闭该实例；全部完成后关闭所有实例。",
-      "",
-      missing.length > 0
-        ? `注意：${missing.length} 个学号尚未设置密码，将无法登录：${missing.join(", ")}`
-        : "",
-      "逐个运行约需 20–40 分钟/人（含模拟锻炼时长），合计较久。确认开始吗？",
-    ];
+    const lines = parallel
+      ? [
+          `将并行运行选中的 ${ids.length} 个学号（同时最多 ${Math.min(currentParallelCount(), ids.length)} 台虚拟机）：`,
+          "开始前会关闭所有已运行的实例；每个学号独立准备（启动实例 + 环境检查）并运行，完成后立即关闭该虚拟机；全部结束后关闭所有实例。",
+          "",
+          missing.length > 0
+            ? `注意：${missing.length} 个学号尚未设置密码，将无法登录：${missing.join(", ")}`
+            : "",
+          "并行运行可缩短总耗时，但同时占用多份 CPU / 内存。确认开始吗？",
+        ]
+      : [
+        `将对选中的 ${ids.length} 个学号逐个运行：`,
+        "每个学号：关闭其他实例 → 自动准备（启动实例 + 环境检查）→ 跑完整流程 → 关闭该实例；全部完成后关闭所有实例。",
+        "",
+        missing.length > 0
+          ? `注意：${missing.length} 个学号尚未设置密码，将无法登录：${missing.join(", ")}`
+          : "",
+        "逐个运行约需 20–40 分钟/人（含模拟锻炼时长），合计较久。确认开始吗？",
+      ];
     const ok = await confirmDialog({
-      title: "开始运行（批量）",
+      title: parallel ? "开始运行（并行）" : "开始运行（批量）",
       body: lines.filter((line) => line !== "").join("\n"),
       okText: "开始",
     });
@@ -184,6 +241,9 @@ async function startRun(): Promise<void> {
       return;
     }
   }
+
+  // 确认后、启动前持久化：保证后端读到最新的执行模式与台数（模式在此锁定）。
+  await persistRunMode();
 
   try {
     await api.startRun(ids);
@@ -242,6 +302,37 @@ function bindEvents(): void {
       state.settings.AutoScroll = checked;
       void api.saveSettings(state.settings).catch(() => undefined);
     }
+  });
+
+  el<HTMLDivElement>("mode-switch")?.addEventListener("click", (event) => {
+    if (isBusy() || !state.settings) {
+      return;
+    }
+    const target = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-mode]");
+    if (!target) {
+      return;
+    }
+    const mode = target.dataset.mode === "parallel" ? "parallel" : "serial";
+    if (state.settings.ExecutionMode === mode) {
+      return;
+    }
+    state.settings.ExecutionMode = mode;
+    syncRunMode();
+    void persistRunMode();
+  });
+
+  el<HTMLInputElement>("parallel-count")?.addEventListener("change", () => {
+    if (!state.settings || isBusy()) {
+      return;
+    }
+    const input = el<HTMLInputElement>("parallel-count");
+    const parsed = Number.parseInt(input?.value ?? "", 10);
+    const count = Number.isFinite(parsed) ? Math.min(8, Math.max(1, parsed)) : 2;
+    state.settings.ParallelVmCount = count;
+    if (input) {
+      input.value = String(count);
+    }
+    void persistRunMode();
   });
 
   initSettings({

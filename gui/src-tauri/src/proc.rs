@@ -118,6 +118,29 @@ mod win {
     }
 }
 
+/// 在 Job 之外预启动 adb server。
+///
+/// 并行运行时会同时存在多个 e2e 子进程；每个子进程都跑在自己的
+/// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE Job 里。若 adb server 是某个子进程孵化的，
+/// 该子进程一结束，Job 关闭就会把共享的 adb server 一起杀掉，打断其它并行任务。
+/// 因此在批次开始前由 GUI 自己（不 assign Job）拉起 server，后续 e2e 复用。
+pub fn ensure_adb_server(mumu_manager_path: &str) -> bool {
+    let adb = Path::new(mumu_manager_path)
+        .parent()
+        .map(|dir| dir.join("adb.exe"))
+        .filter(|path| path.is_file())
+        .unwrap_or_else(|| PathBuf::from("adb"));
+
+    let mut command = Command::new(adb);
+    command
+        .args(["start-server"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    hide_window(&mut command);
+    command.status().map(|status| status.success()).unwrap_or(false)
+}
+
 #[derive(Clone)]
 pub struct SpawnSpec {
     pub program: String,

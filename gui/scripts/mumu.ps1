@@ -19,6 +19,9 @@
 #             [mumu] SHUTDOWN-ALL done count=<n>; with -KeepStudentId that
 #             student's instance is left running (模板 is never touched)
 # info     -> one [mumu] index=... line per instance
+#
+# 并发 ensure 时 Invoke-CloneTemplate 用会话级命名互斥体 'MafMuMuClone' 串行化
+# clone+rename：后进程的 $before 快照早于前进程克隆完成，否则会误判前进程新实例并改名。
 param(
   [Parameter(Mandatory = $true)][ValidateSet('create', 'info', 'ensure', 'shutdown', 'shutdown-all')][string]$Action,
   [string]$StudentId = '',
@@ -68,24 +71,32 @@ function Resolve-AdbPort([string]$i) {
 # the return value in PowerShell).
 function Invoke-CloneTemplate {
   if (-not $StudentId) { Write-Output '[mumu] ERROR student_id_required'; exit 1 }
-  $all = Get-All
-  if (-not $all) { Write-Output '[mumu] ERROR info_failed'; exit 1 }
-  if (@($all.PSObject.Properties | Where-Object { $_.Value.name -eq $StudentId }).Count -ge 1) {
-    Write-Output '[mumu] ERROR already_exists'
-    exit 1
+  # 并发 ensure 时串行化 clone+rename（竞态见文件顶部注释）。
+  $cloneMutex = New-Object System.Threading.Mutex($false, 'MafMuMuClone')
+  try {
+    try { $null = $cloneMutex.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
+    $all = Get-All
+    if (-not $all) { Write-Output '[mumu] ERROR info_failed'; exit 1 }
+    if (@($all.PSObject.Properties | Where-Object { $_.Value.name -eq $StudentId }).Count -ge 1) {
+      Write-Output '[mumu] ERROR already_exists'
+      exit 1
+    }
+    $tpl = @($all.PSObject.Properties | Where-Object { $_.Value.name -eq $Template })
+    if ($tpl.Count -eq 0) { $tpl = @($all.PSObject.Properties | Where-Object { $_.Value.name -like "*$Template*" }) }
+    if ($tpl.Count -eq 0) { Write-Output '[mumu] ERROR template_not_found'; exit 1 }
+    $before = @($all.PSObject.Properties | ForEach-Object { $_.Name })
+    $null = (& $ManagerPath 'clone' '-v' $tpl[0].Name) -join "`n"
+    Start-Sleep 3
+    $all2 = Get-All
+    $new = @($all2.PSObject.Properties | Where-Object { $before -notcontains $_.Name })
+    if ($new.Count -lt 1) { Write-Output '[mumu] ERROR clone_failed'; exit 1 }
+    $idx = $new[0].Name
+    $null = (& $ManagerPath 'rename' '-v' $idx '-n' $StudentId) -join "`n"
+    return $idx
+  } finally {
+    try { $cloneMutex.ReleaseMutex() } catch { }
+    $cloneMutex.Dispose()
   }
-  $tpl = @($all.PSObject.Properties | Where-Object { $_.Value.name -eq $Template })
-  if ($tpl.Count -eq 0) { $tpl = @($all.PSObject.Properties | Where-Object { $_.Value.name -like "*$Template*" }) }
-  if ($tpl.Count -eq 0) { Write-Output '[mumu] ERROR template_not_found'; exit 1 }
-  $before = @($all.PSObject.Properties | ForEach-Object { $_.Name })
-  $null = (& $ManagerPath 'clone' '-v' $tpl[0].Name) -join "`n"
-  Start-Sleep 3
-  $all2 = Get-All
-  $new = @($all2.PSObject.Properties | Where-Object { $before -notcontains $_.Name })
-  if ($new.Count -lt 1) { Write-Output '[mumu] ERROR clone_failed'; exit 1 }
-  $idx = $new[0].Name
-  $null = (& $ManagerPath 'rename' '-v' $idx '-n' $StudentId) -join "`n"
-  return $idx
 }
 
 if ($Action -eq 'info') {

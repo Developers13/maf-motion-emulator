@@ -25,6 +25,8 @@ const settings: AppSettings = {
   WeekLimit: 5,
   TotalLimit: 32,
   SkipOnConfirmedCounts: true,
+  ExecutionMode: "serial",
+  ParallelVmCount: 2,
   AutoScroll: true,
 };
 

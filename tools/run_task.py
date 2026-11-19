@@ -51,7 +51,10 @@ def main() -> int:
     wanted_address = sys.argv[2] if len(sys.argv) > 2 else None
 
     project_dir = Path(__file__).parent.parent.resolve()
-    Toolkit.init_option(str(project_dir / "debug"))
+    # 并行运行时由 GUI 下发每个学号独立的调试目录，避免多个进程同时写
+    # debug/debug/maafw.log（MaaFW 日志轮转会互相踩）。
+    debug_dir = os.environ.get("MAF_DEBUG_DIR") or str(project_dir / "debug")
+    Toolkit.init_option(debug_dir)
 
     devices = Toolkit.find_adb_devices()
     if not devices:

@@ -104,6 +104,33 @@ describe("normalizeSettings", () => {
     expect(normalizeSettings({ SkipOnConfirmedCounts: true }).SkipOnConfirmedCounts).toBe(true);
   });
 
+  it("empty object → defaults: serial / 2", () => {
+    const s = normalizeSettings({});
+    expect(s.ExecutionMode).toBe("serial");
+    expect(s.ParallelVmCount).toBe(2);
+  });
+
+  it("keeps valid parallel mode and count", () => {
+    const s = normalizeSettings({ ExecutionMode: "parallel", ParallelVmCount: 5 });
+    expect(s.ExecutionMode).toBe("parallel");
+    expect(s.ParallelVmCount).toBe(5);
+  });
+
+  it('treats unknown ExecutionMode as serial', () => {
+    expect(normalizeSettings({ ExecutionMode: "weird" }).ExecutionMode).toBe("serial");
+    expect(normalizeSettings({ ExecutionMode: null }).ExecutionMode).toBe("serial");
+  });
+
+  it('ParallelVmCount: 0 / -3 / "3" / NaN → 2; 99 → 8; 2.7 → 2', () => {
+    expect(normalizeSettings({ ParallelVmCount: 0 }).ParallelVmCount).toBe(2);
+    expect(normalizeSettings({ ParallelVmCount: -3 }).ParallelVmCount).toBe(2);
+    expect(normalizeSettings({ ParallelVmCount: "3" }).ParallelVmCount).toBe(2);
+    expect(normalizeSettings({ ParallelVmCount: NaN }).ParallelVmCount).toBe(2);
+    expect(normalizeSettings({ ParallelVmCount: Infinity }).ParallelVmCount).toBe(2);
+    expect(normalizeSettings({ ParallelVmCount: 99 }).ParallelVmCount).toBe(8);
+    expect(normalizeSettings({ ParallelVmCount: 2.7 }).ParallelVmCount).toBe(2);
+  });
+
   it("ignores unknown fields", () => {
     const s = normalizeSettings({ Foo: "bar", Bar: 1, PythonLauncher: "py" } as unknown);
     expect(s).not.toHaveProperty("Foo");
@@ -126,6 +153,8 @@ describe("serializeSettings", () => {
       WeekLimit: 7,
       TotalLimit: 40,
       SkipOnConfirmedCounts: false,
+      ExecutionMode: "parallel",
+      ParallelVmCount: 3,
       AutoScroll: false,
     };
     const expected = [
@@ -147,6 +176,8 @@ describe("serializeSettings", () => {
       '  "WeekLimit": 7,',
       '  "TotalLimit": 40,',
       '  "SkipOnConfirmedCounts": false,',
+      '  "ExecutionMode": "parallel",',
+      '  "ParallelVmCount": 3,',
       '  "AutoScroll": false',
       "}",
     ].join("\n");
@@ -167,6 +198,8 @@ describe("serializeSettings", () => {
       "WeekLimit",
       "TotalLimit",
       "SkipOnConfirmedCounts",
+      "ExecutionMode",
+      "ParallelVmCount",
       "AutoScroll",
     ];
     for (let i = 0; i < order.length - 1; i += 1) {
@@ -184,6 +217,8 @@ describe("serializeSettings", () => {
       WeekLimit: 2,
       TotalLimit: 8,
       Environment: { X: 1 },
+      ExecutionMode: "parallel",
+      ParallelVmCount: 4,
       AutoScroll: false,
     });
     const json = serializeSettings(s);
