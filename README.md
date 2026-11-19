@@ -13,82 +13,82 @@ NPU sports after-class exercise automation: route simulation via [Motion Emulato
 - **Stop & save the record**: tap the red stop button → confirm inside the 60-second countdown sheet → verify the record page — the workout is never left running
 - **Self-healing state machine**: handles cold-start scrolling, whitelist guide page, time-window and abnormal-record dialogs, orphaned workouts from previous crashes (stop-save-restart, never "continue"), post-save record/Discover pages, and re-login when the session expires
 
-## 快速开始（非开发者）
+## Quick Start (Non-Developers)
 
-> 只想在 Windows 上用 GUI 跑体育课外锻炼？按下面 5 步即可。开发/CLI 用法见后文。
+> Just want to run the GUI on Windows? Follow the five steps below. Development/CLI usage is documented later.
 
-### 0. 先确认你有这些
+### 0. Prerequisites
 
-- Windows 10/11（x64）
-- [Python 3.10+](https://www.python.org/downloads/windows/)（安装时勾选 **Add python.exe to PATH**）
+- Windows 10/11 (x64)
+- [Python 3.10+](https://www.python.org/downloads/windows/) (check **Add python.exe to PATH** during installation)
 - [MuMu Player 12](https://mumu.163.com/)
-- 一个可用的 MuMu **模板实例**（默认名 `模板`），里面已经装好：
-  - 西工大体育 App
-  - [Motion Emulator](https://github.com/zhufucdev/MotionEmulator)，并且**已录制、已选中一条路线**
-  - Magisk + LSPosed root 环境（GUI 准备阶段会检查；Magisk 缺失时会尝试自动修复，LSPosed 缺失仍需手动处理）
-- 你的学号和体育 App 密码
+- A usable MuMu **template instance** (default name `模板`) with:
+  - the NPU Sports app
+  - [Motion Emulator](https://github.com/zhufucdev/MotionEmulator) with a route recorded and selected
+  - a Magisk + LSPosed root environment (the GUI checks this during preparation; missing Magisk may be repaired automatically, while missing LSPosed needs manual handling)
+- Your student ID and NPU Sports password
 
-### 1. 下载并解压
+### 1. Download and extract
 
-到 [Releases](../../releases) 下载 Windows GUI 资产：
+Download a Windows GUI asset from [Releases](../../releases):
 
-- **便携版**：`MAF-motion-emulator-gui-win-x64-*.zip`，解压到一个**可写目录**（例如 `D:\MAF-Motion-Emulator`，不要放 `Program Files`）。
-- **安装版**：`MAF Motion Emulator_*_x64-setup.exe`，按向导安装即可。
+- **Portable**: `MAF-motion-emulator-gui-win-x64-*.zip` — extract to a **writable folder** (for example `D:\MAF-Motion-Emulator`, not `Program Files`).
+- **Installer**: `MAF Motion Emulator_*_x64-setup.exe` — run the installer.
 
-便携版和安装版都已包含 `tools/`、`gui/scripts/`、`agent/`、`assets/`（含 OCR 模型）和 README。
+Both packages include `tools/`, `gui/scripts/`, `agent/`, `assets/` (including the OCR model) and the README.
 
-### 2. 安装 MaaFW（Python 依赖）
+### 2. Install MaaFW (Python dependency)
 
-在便携版目录（或安装目录）打开 PowerShell：
+Open PowerShell in the portable folder (or install folder):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\setup_runtime.ps1
 ```
 
-脚本会检查并安装 `maafw`，同时检查 OCR 模型（release 包已内置，通常会直接跳过）。如果脚本找不到 Python，先安装 Python 3.10+；pip 网络慢时可手动：
+The script installs `maafw` and checks the OCR model (the release package already contains it, so this usually skips). If it cannot find Python, install Python 3.10+ first. If pip is slow, run manually:
 
 ```powershell
 py -m pip install --upgrade maafw
 ```
 
-### 3. 准备 MuMu 模板实例
+### 3. Prepare the MuMu template
 
-1. 打开 MuMu Player 12，找到或创建一个实例，重命名为 `模板`（或记住实际名字）。
-2. 在该实例中安装体育 App 和 Motion Emulator，并在 Motion Emulator 里录制、选中一条路线。
-3. 确认实例已开启 adb（MuMu 设置 → 其他 → ADB 调试）。
-4. 模板实例保持关闭即可，不需要手动启动；GUI 会按需克隆和启动。
-5. 如果模板不叫 `模板`：打开 GUI → 设置 → 运行环境 → 模板虚拟机，改成实际名字。
+1. Open MuMu Player 12 and create/find an instance; rename it to `模板` (or remember its actual name).
+2. Install the NPU Sports app and Motion Emulator in that instance, then record and select a route in Motion Emulator.
+3. Make sure adb is enabled for the instance (MuMu Settings → Other → ADB debugging).
+4. Keep the template instance stopped; the GUI clones and launches it on demand.
+5. If the template is not named `模板`: open the GUI → Settings → Environment → Template VM and enter the actual name.
 
-### 4. 添加学号
+### 4. Add students
 
-1. 右键 `maf-motion-emulator.exe` → **以管理员身份运行**（MuMu/adb 需要提权）。
-2. 打开 设置 → 用户列表 → 添加行，填写：
-   - **学号**：体育 App 登录账号
-   - **密码**：体育 App 密码（只写入本机 `user-list.json`，不进入日志/缓存）
-   - **距离**：`2.4` 或 `3.2` km（决定模拟圈数和目标里程）
-3. 点保存。
+1. Right-click `maf-motion-emulator.exe` → **Run as administrator** (MuMu/adb require elevation).
+2. Open Settings → Users → Add row and fill in:
+   - **Student ID**: the NPU Sports login account
+   - **Password**: the NPU Sports password (stored only in the local `user-list.json`; never written to logs or caches)
+   - **Distance**: `2.4` or `3.2` km (controls the simulation lap count and target distance)
+3. Save.
 
-### 5. 开始运行
+### 5. Run
 
-1. 在左侧勾选要跑的学生（可多选）。
-2. 选择「串行」或「并行」；并行时可设置同时开启的虚拟机台数。
-3. 点「开始运行」并确认。
-4. 首次运行会按学号克隆/启动实例，约 20–40 分钟/人；日志会显示进度，结束后发送 Windows 通知。
-5. 需要中止时点「停止」；GUI 会取消并关闭本次启动的实例。
+1. Select one or more students in the left rail.
+2. Choose **Serial** or **Parallel**; parallel mode also lets you set the number of VMs to run at once.
+3. Click **Start run** and confirm.
+4. The first run clones/launches an instance per student and takes roughly 20–40 minutes per student; the log shows progress and a Windows notification is sent when it finishes.
+5. Click **Stop** to abort; the GUI cancels the run and closes the instances it started.
 
-> **注意**：批量开始前会关闭所有非模板实例。运行前请保存其他 MuMu 实例里的工作，避免误关。
+> **Note**: A batch closes every non-template instance before starting. Save your work in other MuMu instances first.
 
-### 常见问题
+### Troubleshooting
 
-| 现象 | 处理 |
+| Symptom | Fix |
 |---|---|
-| 启动时报 `os error 740` / UAC | 用「以管理员身份运行」启动 exe。 |
-| 提示找不到 Python / `maafw` | 确认 `py --version` 可用；或在 设置 → 运行环境 把 Python 启动器改成 `python`。 |
-| 提示 MuMu manager not found | 在 设置 → 运行环境 填对 `MuMuManager.exe` 路径。 |
-| 提示模板不存在 / 克隆失败 | 确认模板虚拟机名字与设置一致，且模板实例没有被删除。 |
-| 提示 `LSPOSED MISSING` / root 修复失败 | 模板的 root 环境不完整；需要先在模板里准备好 Magisk + LSPosed，再运行 GUI。 |
-| 体育 App 记录无效 | 确认模板里 Motion Emulator 路线可用、体育 App 能正常登录；可先在模板里手动跑一次。 |
-| 需要更详细的排障 | 见 [docs/tauri-gui.md](docs/tauri-gui.md)。 |
+| `os error 740` / UAC prompt on launch | Start the exe with **Run as administrator**. |
+| Python / `maafw` not found | Make sure `py --version` works; or set the Python launcher to `python` in Settings → Environment. |
+| MuMu manager not found | Set the correct `MuMuManager.exe` path in Settings → Environment. |
+| Template not found / clone failed | Make sure the template VM name matches Settings and the template instance still exists. |
+| `LSPOSED MISSING` / root recovery failed | The template's root environment is incomplete; prepare Magisk + LSPosed in the template before running the GUI. |
+| NPU Sports record is invalid | Check that the Motion Emulator route works and the sports app can log in; try one manual run in the template first. |
+| More detailed troubleshooting | See [docs/tauri-gui.md](docs/tauri-gui.md). |
 
 ## Requirements
 
