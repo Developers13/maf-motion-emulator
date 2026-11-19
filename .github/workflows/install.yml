@@ -17,6 +17,9 @@ on:
       - ".github/workflows/install.yml"
       - "assets/**"
       - "**.py"
+      - "gui/**"
+      - "tools/**"
+      - "agent/**"
   pull_request:
     branches:
       - "**"
@@ -24,6 +27,9 @@ on:
       - ".github/workflows/install.yml"
       - "assets/**"
       - "**.py"
+      - "gui/**"
+      - "tools/**"
+      - "agent/**"
   workflow_dispatch:
 
 jobs:
@@ -148,6 +154,62 @@ jobs:
           name: MAF-motion-emulator-${{ matrix.os }}-${{ matrix.arch }}
           path: "install"
 
+  gui-windows:
+    needs: meta
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: gui
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download OCR model (ppocr_v6 small)
+        working-directory: .
+        shell: pwsh
+        run: |
+          curl.exe -fL https://download.maafw.xyz/MaaCommonAssets/OCR/ppocr_v6/ppocr_v6-small.zip -o ppocr_v6-small.zip
+          New-Item -ItemType Directory -Force -Path assets/resource/model/ocr | Out-Null
+          Expand-Archive -LiteralPath ppocr_v6-small.zip -DestinationPath assets/resource/model/ocr -Force
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: gui/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app (exe + NSIS installer)
+        run: pnpm tauri build
+
+      - name: Assemble portable runtime
+        working-directory: .
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File tools/package_gui_win.ps1 `
+            -ExePath "gui/src-tauri/target/release/maf-motion-emulator.exe" `
+            -OutDir "dist" `
+            -NoZip
+
+      - name: Upload portable runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: MAF-motion-emulator-gui-win-x64
+          path: dist/MAF-motion-emulator-gui-win-x64
+          if-no-files-found: error
+
+      - name: Upload NSIS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: maf-motion-emulator-gui-installer
+          path: gui/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
   changelog:
     name: Generate changelog
     needs: meta
@@ -174,7 +236,7 @@ jobs:
 
   release:
     if: ${{ needs.meta.outputs.is_release == 'true' }}
-    needs: [meta, install, changelog]
+    needs: [meta, install, gui-windows, changelog]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -184,12 +246,16 @@ jobs:
       - run: |
           cd assets
           for f in *; do
-            (cd $f && zip -r ../$f-${{ needs.meta.outputs.tag }}.zip .)
+            if [ -d "$f" ] && [ "$f" != "maf-motion-emulator-gui-installer" ]; then
+              (cd "$f" && zip -r "../$f-${{ needs.meta.outputs.tag }}.zip" .)
+            fi
           done
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: assets/*
+          files: |
+            assets/*.zip
+            assets/maf-motion-emulator-gui-installer/*.exe
           tag_name: ${{ needs.meta.outputs.tag }}
           body: ${{ needs.changelog.outputs.release_body }}
           draft: false

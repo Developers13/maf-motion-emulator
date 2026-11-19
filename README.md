@@ -190,6 +190,7 @@ maf-motion-emulator/
 │   ├── e2e.py               # CLI entry: batch / single-student runs
 │   ├── run_task.py          # low-level: run one pipeline entry against adb
 │   ├── setup_runtime.ps1    # one-shot maafw + OCR model setup
+│   ├── package_gui_win.ps1  # portable Windows GUI runtime zip
 │   ├── install.py           # release packaging
 │   └── validate_schema.py   # pipeline/interface schema validation
 └── user-list.json           # credentials — local only, gitignored
@@ -220,11 +221,36 @@ The manual steps below are equivalent.
    `127.0.0.1:16384 + 32 × instance index`), capture live screenshots, crop
    template assets into `assets/resource/image/`
 
+## Windows GUI release
+
+GitHub Releases publish two Windows GUI assets in addition to the existing
+MaaFramework bundles:
+
+- `MAF-motion-emulator-gui-win-x64-<tag>.zip` — portable runtime. Extract to a
+  writable folder and run `maf-motion-emulator.exe` as administrator. The exe is
+  at the zip root together with `tools/`, `gui/scripts/`, `agent/`, `assets/`
+  (including the OCR model) and the README.
+- `MAF Motion Emulator_<version>_x64-setup.exe` — NSIS installer. It installs the
+  GUI plus the same runtime resources next to the executable.
+
+Still external prerequisites (not bundled): Python 3.10+ with `maafw`
+(`tools/setup_runtime.ps1` installs it), MuMu Player 12 with an Android instance
+and the required apps, and `user-list.json` (add students from Settings). The
+GUI writes `gui/gui-settings.json`, `gui/exercise-status.json`, `user-list.json`
+and `debug/` under its project root, so the portable zip should live in a
+writable folder.
+
+The `nemu.exe` fallback used by root recovery is not built by CI (only its
+`nemu.cs` source is included); the primary adb path works without it. Build it
+locally if recovery needs the MuMu SDK fallback.
+
 ## CI/CD
 
 - **check** (push/PR): `@nekosu/maa-tools check` + JSON Schema validation (pipeline / interface)
 - **install** (push/PR → CI artifacts; `v*` tag → automatic GitHub Release):
   downloads MaaFramework + MFAAvalonia releases → assembles installers for 4 OS × 2 arch → git-cliff changelog
+- **gui-windows** (part of `install`): `pnpm install --frozen-lockfile` →
+  `pnpm tauri build` → NSIS installer + portable Windows runtime zip
 
 Release flow:
 
